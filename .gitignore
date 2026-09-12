@@ -1,0 +1,19 @@
+# Visual Studio 產生的垃圾與快取
+.vs/
+[Bb]uild/
+[Oo]ut/
+*.user
+*.suo
+*.vcxproj*
+*.sln
+
+# 編譯產生的二進位檔
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.lib
+*.dll
+
+# D3D12 Shader 編譯暫存
+*.cso
