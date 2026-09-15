@@ -17,13 +17,8 @@ void Timer::StartFrame() {
     }
 
     // 純FPS計算
-    m_fpsCount++;
-    m_fpsTimer += m_deltaTime;
-    if (m_fpsTimer > 1.0) {
-        m_currentFPS = m_fpsCount;
-        m_fpsTimer -= 1.0;
-        m_fpsCount = 0;
-    }
+    double instantFPS = (m_deltaTime > 0.0) ? (1.0 / m_deltaTime) : 0.0;
+    m_currentFPS = (m_currentFPS * 0.95) + (instantFPS * 0.05);
 }
 
 void Timer::EndFrame() {

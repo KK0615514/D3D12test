@@ -27,10 +27,11 @@ public:
 	};
 
 private:
+	//拆掉 cbv sb 
 	 std::unique_ptr<D3D12Engine>		m_d3d12Engine;
 	 std::unique_ptr<QueueManager>		m_queueManager;
 
-	 //後續增加 psoManager
+	 //後續增加 psoManager 拆掉VB IB
 	 std::unique_ptr<RenderManager>		m_renderManager;
 
 	 //後續新增buffer manager

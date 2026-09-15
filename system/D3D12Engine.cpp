@@ -26,7 +26,7 @@ void D3D12Engine::InitDevice() {
 
 #else
     // Release版本 不啟用Debug層
-    ThrowIfFailed(
+    Common::ThrowIfFailed(
         CreateDXGIFactory2(0, IID_PPV_ARGS(&m_factory)), 
         "Factory建立失敗"
     );
@@ -281,6 +281,7 @@ void D3D12Engine::UpdateInstanceSB(const IScene& currentScene) {
         currentScene.InstanceDatas.size() * sizeof(InstanceData)
     );
 }
+
 void D3D12Engine::UpdateSwapChainBackBufferIndex() {
     m_swapChain->Present(0, 0);//DXGI_PRESENT_ALLOW_TEARING
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();

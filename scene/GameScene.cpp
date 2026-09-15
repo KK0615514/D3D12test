@@ -50,10 +50,10 @@ void GameScene::Update() {
 	OnCollide();
 
 	enemySpawnCd += delta;
-	if (enemySpawnCd > 0.15f) {
+	if (enemySpawnCd > 0.20f) {
 
-		for(int i =0;i<2000;i++)	SpawnEnemy();
-		enemySpawnCd -= 0.15f;
+		for(int i =0;i<300;i++)	SpawnEnemy();
+		enemySpawnCd -= 0.20f;
 	}
 
 	playerAtkCd += delta;

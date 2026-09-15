@@ -21,7 +21,6 @@
 #include "gameobject/Audio.h"
 
 int main(int argc, char* argv[]) {
-
     // 取得模組實例控制代碼    // 建立視窗
     int windowWidth = 1280;
     int windowHeight = 720;
@@ -33,7 +32,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 核心物件設定
-    Timer::GetInstance().SetTargetFPS(60);
+    Timer::GetInstance().SetTargetFPS(80);
     RenderSystem::GetInstance().Init(hwnd);
 
     // 顯示視窗

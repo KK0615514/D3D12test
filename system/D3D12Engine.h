@@ -44,7 +44,7 @@ public:
 	void*								m_cbvCpuAdress[FrameCount][MaxCBVsPerFrame] = {nullptr};
 
 	//sturcture buffer
-	const size_t						MAX_ELEMENTS = 80000;      // 物件上限
+	const size_t						MAX_ELEMENTS = 100000;      // 物件上限
 	ComPtr<ID3D12Resource>				m_structureBuffer[FrameCount];
 	InstanceData*						m_structureBufferCpuAddress[FrameCount] = { nullptr };
 
