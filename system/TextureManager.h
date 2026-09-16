@@ -10,8 +10,7 @@ struct TextureHandle {
 	uint32_t id; // 或者叫 descriptorIndex [1]
 };
 
-struct TextureData
-{	
+struct TextureData{	
 	ComPtr<ID3D12Resource> resource;			
 	uint32_t descriptorIndex;						//srv編號
 };

@@ -23,6 +23,7 @@ add_executable(ECS
     "system/TextureManager.h"          "system/TextureManager.cpp"
     "system/RenderManager.h"           "system/RenderManager.cpp"  
     "system/QueueManager.h"            "system/QueueManager.cpp"  
+    "system/ResourceManager.h"         "system/ResourceManager.cpp"
     "system/Timer.h"                   "system/Timer.cpp"
     "system/ShaderConstantBuffer.h" 
     "system/ShaderStructureBuffer.h" 

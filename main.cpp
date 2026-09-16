@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 核心物件設定
-    Timer::GetInstance().SetTargetFPS(80);
+    Timer::GetInstance().SetTargetFPS(144);
     RenderSystem::GetInstance().Init(hwnd);
 
     // 顯示視窗

@@ -5,10 +5,10 @@
 
 #include "CommonUtils.h"
 
-//test
+//test			可刪除
 #include "../scene/GameScene.h"
 
-//移動進buffer manager
+//移動進buffer manager			可刪除
 #include "ShaderStructureBuffer.h"
 #include "ShaderConstantBuffer.h"
 
@@ -32,8 +32,8 @@ public:
 	//當前SwapChain的Buffer編號
 	uint32_t							m_frameIndex = 0;
 
-	uint32_t	m_height = 720;
-	uint32_t	m_width = 1280;
+	uint32_t							m_height = 720;
+	uint32_t							m_width = 1280;
 
 	//Root Signature
 	ComPtr<ID3D12RootSignature>			m_rootSignature;
@@ -52,21 +52,15 @@ public:
 	D3D12Engine() = default;
 	~D3D12Engine() = default;
 
-	void Init();
+	void InitRootSig();
 	void InitDevice();
 	void InitSwapChain(HWND hwnd, ID3D12CommandQueue* Queue);
 
-	void Update(const IScene& currentScene);
+	void Update();
 	void Shutdown();
 
 	void UpdateSwapChainBackBufferIndex();
 
 private:
-	void InitializeRootSignature();
-	void InitializeConstantBuffer();
-	void InitializeStructureBuffer();
 
-	//後續更新進buffer manager
-	void UpdatePerFrameCB(const IScene& currentScene);
-	void UpdateInstanceSB(const IScene& currentScene);
 };

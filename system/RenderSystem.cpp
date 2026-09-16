@@ -6,8 +6,11 @@ void RenderSystem::Init(HWND hwnd) {
 
     m_queueManager = std::make_unique<QueueManager>(m_d3d12Engine->m_device.Get());
     m_queueManager->Init();
-    m_d3d12Engine->Init();
     m_d3d12Engine->InitSwapChain(hwnd, m_queueManager->m_commandQueue.Get());
+    m_d3d12Engine->InitRootSig();
+
+    m_resourceManager = std::make_unique<ResourceManager>(m_d3d12Engine->m_device.Get());
+    m_resourceManager->Init();
 
 	m_textureManager = std::make_unique<TextureManager>(m_d3d12Engine->m_device.Get());
 	m_textureManager->Init();
@@ -20,9 +23,9 @@ void RenderSystem::Init(HWND hwnd) {
 }
 
 void RenderSystem::Render() {
-    auto& cmdList = m_queueManager->m_commandList;
     uint32_t currentFrame = m_d3d12Engine->m_frameIndex;
-    ComPtr<ID3D12Resource> pBackBuffer = m_d3d12Engine->m_renderTargets[currentFrame];
+    auto& cmdList = m_queueManager->m_commandList;
+    auto& pBackBuffer = m_d3d12Engine->m_renderTargets[currentFrame];
 
     //一幀的開始
     m_queueManager->WaitFrameReady(currentFrame);
@@ -51,10 +54,10 @@ void RenderSystem::Render() {
     D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandle = m_textureManager->m_srvHeap->GetGPUDescriptorHandleForHeapStart();
     cmdList->SetGraphicsRootDescriptorTable(0, textureSrvHandle);
     //設定sb srv as root descriptor
-    D3D12_GPU_VIRTUAL_ADDRESS sbAddress = m_d3d12Engine->m_structureBuffer[currentFrame]->GetGPUVirtualAddress();
+    D3D12_GPU_VIRTUAL_ADDRESS sbAddress = m_resourceManager->m_structureBuffer[currentFrame]->GetGPUVirtualAddress();
     cmdList->SetGraphicsRootShaderResourceView(1, sbAddress); 
     //設定cbv as root descriptor
-    D3D12_GPU_VIRTUAL_ADDRESS cbvAddress = m_d3d12Engine->m_constantBuffer[currentFrame][0]->GetGPUVirtualAddress();
+    D3D12_GPU_VIRTUAL_ADDRESS cbvAddress = m_resourceManager->m_constantBuffer[currentFrame][0]->GetGPUVirtualAddress();
     cmdList->SetGraphicsRootConstantBufferView(2, cbvAddress);
 
     //綁定PSO
@@ -74,7 +77,9 @@ void RenderSystem::Render() {
 
 //臨時用的 改成0複製
 void RenderSystem::Update(IScene& currentScene) {
-    m_d3d12Engine->Update(currentScene);
+    uint32_t currentFrame = m_d3d12Engine->m_frameIndex;
+
+    m_resourceManager->Update(currentScene,currentFrame);
     InstanceCounts = currentScene.instanceCounts;
 }
 
@@ -98,21 +103,24 @@ void RenderSystem::SetViewPortAndScissorRect() {
 
 //很醜 要大修
 void RenderSystem::LoadTexture() {
-    m_queueManager->m_commandAllocator[m_d3d12Engine->m_frameIndex]->Reset();
-    m_queueManager->m_commandList->Reset(m_queueManager->m_commandAllocator[m_d3d12Engine->m_frameIndex].Get(), nullptr);
+    uint32_t currentFrame = m_d3d12Engine->m_frameIndex;
+    auto& textureLoadQueue = m_queueManager->m_commandList;
 
-    m_textureManager->LoadTexture("asset/texture/pickle.png", m_queueManager->m_commandList.Get());         //0
-    m_textureManager->LoadTexture("asset/texture/poop.png", m_queueManager->m_commandList.Get());
-    m_textureManager->LoadTexture("asset/texture/waterball.png", m_queueManager->m_commandList.Get());
-    m_textureManager->LoadTexture("asset/texture/crosshair.png", m_queueManager->m_commandList.Get());
-    m_textureManager->LoadTexture("asset/texture/yUI.png", m_queueManager->m_commandList.Get());
-    m_textureManager->LoadTexture("asset/texture/rUI.png", m_queueManager->m_commandList.Get());
-    m_textureManager->LoadTexture("asset/texture/START.png", m_queueManager->m_commandList.Get());          //6
-    m_textureManager->LoadTexture("asset/font/eng.png", m_queueManager->m_commandList.Get());
-    m_textureManager->LoadTexture("asset/texture/Suck.jpg", m_queueManager->m_commandList.Get());
+    m_queueManager->m_commandAllocator[currentFrame]->Reset();
+    m_queueManager->m_commandList->Reset(m_queueManager->m_commandAllocator[currentFrame].Get(), nullptr);
+
+    m_textureManager->LoadTexture("asset/texture/pickle.png", textureLoadQueue.Get());         //0
+    m_textureManager->LoadTexture("asset/texture/poop.png", textureLoadQueue.Get());
+    m_textureManager->LoadTexture("asset/texture/waterball.png", textureLoadQueue.Get());
+    m_textureManager->LoadTexture("asset/texture/crosshair.png", textureLoadQueue.Get());
+    m_textureManager->LoadTexture("asset/texture/yUI.png", textureLoadQueue.Get());
+    m_textureManager->LoadTexture("asset/texture/rUI.png", textureLoadQueue.Get());
+    m_textureManager->LoadTexture("asset/texture/START.png", textureLoadQueue.Get());          //6
+    m_textureManager->LoadTexture("asset/font/eng.png", textureLoadQueue.Get());
+    m_textureManager->LoadTexture("asset/texture/Suck.jpg", textureLoadQueue.Get());
 
     m_queueManager->m_commandList->Close();
-    ID3D12CommandList* cmds[] = { m_queueManager->m_commandList.Get() };
+    ID3D12CommandList* cmds[] = { textureLoadQueue.Get() };
     m_queueManager->m_commandQueue->ExecuteCommandLists(1, cmds);
 
     m_queueManager->FlushCommandQueue();

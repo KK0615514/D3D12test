@@ -19,6 +19,7 @@ public:
 	uint64_t								m_commandQueueFenceValue[2]{0};
 	uint64_t								m_currentFenceValue = 1;
 	HANDLE									m_commandQueueFenceEvent = nullptr;
+
 public:
 	QueueManager() = delete;
 	QueueManager(ID3D12Device4* device) :m_device(device) {};

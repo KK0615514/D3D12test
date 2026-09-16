@@ -1,9 +1,12 @@
 #pragma once
 
-#include "TextureManager.h"
-#include "RenderManager.h"
 #include "D3D12Engine.h"
 #include "QueueManager.h"
+#include "ResourceManager.h"
+
+#include "TextureManager.h"
+#include "RenderManager.h"
+
 
 class RenderSystem
 {
@@ -30,6 +33,7 @@ private:
 	//拆掉 cbv sb 
 	 std::unique_ptr<D3D12Engine>		m_d3d12Engine;
 	 std::unique_ptr<QueueManager>		m_queueManager;
+	 std::unique_ptr<ResourceManager>	m_resourceManager;
 
 	 //後續增加 psoManager 拆掉VB IB
 	 std::unique_ptr<RenderManager>		m_renderManager;
