@@ -13,9 +13,8 @@
 #include "system/InputManager.h"
 #include "system/Window.h"
 
-#include "scene/MenuScene.h"
+//可刪除
 #include "scene/GameScene.h"
-#include "scene/ResultScene.h"
 
 //複製貼上
 #include "gameobject/Audio.h"
@@ -70,11 +69,11 @@ int main(int argc, char* argv[]) {
         abc += Timer::GetInstance().GetDeltaTime();
         if (abc >= 1.0f) {
             std::cout << Timer::GetInstance().GetFPS() << std::endl;
-            std::cout << currentScene->m_enemys.size() << std::endl;
+            //std::cout << currentScene->m_enemys.size() << std::endl;
             abc -= 1.0f;
         }
 
-        currentScene->Update();
+        currentScene->Updateaaa();
 
         RenderSystem::GetInstance().Update(*currentScene);
         RenderSystem::GetInstance().Render();

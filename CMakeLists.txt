@@ -17,29 +17,31 @@ set(CMAKE_CXX_STANDARD 20)
 add_executable(ECS  
     "main.cpp"
 
-    "system/Window.h"                  "system/Window.cpp" 
-    "system/RenderSystem.h"            "system/RenderSystem.cpp"   
-    "system/D3D12Engine.h"             "system/D3D12Engine.cpp"
-    "system/TextureManager.h"          "system/TextureManager.cpp"
-    "system/RenderManager.h"           "system/RenderManager.cpp"  
-    "system/QueueManager.h"            "system/QueueManager.cpp"  
-    "system/ResourceManager.h"         "system/ResourceManager.cpp"
-    "system/Timer.h"                   "system/Timer.cpp"
-    "system/ShaderConstantBuffer.h" 
-    "system/ShaderStructureBuffer.h" 
-    "system/InputManager.h"
-    "system/CommonUtils.h"
+    "system/Window.cpp" 
+    "system/RenderSystem.cpp"   
+    "system/D3D12Engine.cpp"
+    "system/QueueManager.cpp"  
+    "system/ResourceManager.cpp"
 
-    "scene/IScene.h"
-    "scene/MenuScene.cpp"       "scene/MenuScene.h" 
-    "scene/GameScene.cpp"       "scene/GameScene.h" 
-    "scene/ResultScene.cpp"     "scene/ResultScene.h" 
+    "system/Timer.cpp"
 
+    "scene/Game3DScene.cpp" 
+
+
+    #以下全刪除
+    "scene/GameScene.cpp"       
+
+    #以下全刪除
     "gameobject/Enemy.h" 
     "gameobject/Player.h"  
     "gameobject/Bullet.h" "gameobject/Crosshair.h" "gameobject/UI.h"
     "gameobject/Audio.h"  "gameobject/Audio.cpp" 
     "gameobject/Text.h"
+
+
+    #可刪除 之後
+    "system/TextureManager.h"          "system/TextureManager.cpp"
+    "system/RenderManager.h"           "system/RenderManager.cpp"  
 )
 
 #release設定下 關閉cmd窗口
@@ -57,6 +59,7 @@ find_package(imgui CONFIG REQUIRED)
 
 add_library(stb INTERFACE)
 target_include_directories(stb INTERFACE "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include")
+target_include_directories(ECS PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ECS PRIVATE 
     d3d12
     dxgi
@@ -76,7 +79,6 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/asset"
         "$<TARGET_FILE_DIR:ECS>/asset"
     COMMENT "Copying assets to output directory...")
-
 
 # 指定shader內 *.hlsl 
 set(SHADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/shader")

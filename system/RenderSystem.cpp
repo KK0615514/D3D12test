@@ -79,7 +79,7 @@ void RenderSystem::Render() {
 void RenderSystem::Update(IScene& currentScene) {
     uint32_t currentFrame = m_d3d12Engine->m_frameIndex;
 
-    m_resourceManager->Update(currentScene,currentFrame);
+    m_resourceManager->Update(currentScene,currentFrame);       //更新CB SB
     InstanceCounts = currentScene.instanceCounts;
 }
 

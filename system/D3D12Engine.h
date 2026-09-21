@@ -6,11 +6,7 @@
 #include "CommonUtils.h"
 
 //test			可刪除
-#include "../scene/GameScene.h"
-
-//移動進buffer manager			可刪除
-#include "ShaderStructureBuffer.h"
-#include "ShaderConstantBuffer.h"
+#include "scene/GameScene.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -37,16 +33,6 @@ public:
 
 	//Root Signature
 	ComPtr<ID3D12RootSignature>			m_rootSignature;
-
-	//cbv
-	static const uint32_t				MaxCBVsPerFrame = 3;						//每個Frame最多幾個cbv
-	ComPtr<ID3D12Resource>				m_constantBuffer[FrameCount][MaxCBVsPerFrame];
-	void*								m_cbvCpuAdress[FrameCount][MaxCBVsPerFrame] = {nullptr};
-
-	//sturcture buffer
-	const size_t						MAX_ELEMENTS = 100000;      // 物件上限
-	ComPtr<ID3D12Resource>				m_structureBuffer[FrameCount];
-	InstanceData*						m_structureBufferCpuAddress[FrameCount] = { nullptr };
 
 public:
 	D3D12Engine() = default;

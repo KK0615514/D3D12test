@@ -2,11 +2,13 @@
 #include <memory>
 #include <vector>
 
+#include "../system/Timer.h"
 #include "../system/Random.h"
 #include "../system/InputManager.h"
 
+//可刪除
 #include "../system/ShaderStructureBuffer.h" 
-
+//可刪除
 #include "../gameobject/Enemy.h"
 #include "../gameobject/Player.h"
 #include "../gameobject/Bullet.h"
@@ -15,6 +17,7 @@
 #include "../gameobject/Text.h"
 
 inline int finalscore{0};
+
 enum class SceneType {
     Menu,
     Game,
@@ -35,7 +38,7 @@ public:
     SceneType currentScene;
 
     virtual ~IScene() = default;
-    virtual void Update() = 0;
+    virtual void Updateaaa() = 0;
     virtual std::unique_ptr<IScene> ChangeScene() = 0;
     virtual uint32_t PackInstanceData() = 0;
 };

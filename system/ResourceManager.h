@@ -6,7 +6,7 @@
 #include "CommonUtils.h"
 
 //test			注意調整後面func傳入參數 
-#include "../scene/GameScene.h"
+#include "scene/GameScene.h"
 
 #include "ShaderStructureBuffer.h"
 #include "ShaderConstantBuffer.h"

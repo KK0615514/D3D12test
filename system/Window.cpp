@@ -57,9 +57,7 @@ HWND CreateNativeWindow(int width, int height, HINSTANCE hInstance) {
     RECT windowRect = { 0, 0, width, height };
     AdjustWindowRect(&windowRect, WS_OVERLAPPEDWINDOW, FALSE);
 
-
     const wchar_t* windowTitle = L"うんこ";
-
 
     // 建立視窗
     HWND hwnd = CreateWindowExW(

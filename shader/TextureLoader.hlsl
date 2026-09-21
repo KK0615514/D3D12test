@@ -46,6 +46,6 @@ VS_OUTPUT VSMain(VS_INPUT input, uint instanceID : SV_InstanceID)
 }
 float4 PSMain(VS_OUTPUT input) : SV_TARGET
 {
-    float4 color = g_texture[input.texIndex].Sample(g_sampler, input.uv);
+    float4 color = g_texture[NonUniformResourceIndex(input.texIndex)].Sample(g_sampler, input.uv);
     return color;
 }

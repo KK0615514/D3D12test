@@ -23,17 +23,15 @@ GameScene::GameScene(){
 
 	m_enemys.reserve(1000);
 	m_bullets.reserve(1000);
-	SimpleAudio::Get().PlayBGM(L"C:/Ecs Project/out/build/x64-Debug/asset/bgm/custom_standard.wav");
 
 	currentScene = SceneType::Game;
 }
 
 //IScene
-void GameScene::Update() {
+void GameScene::Updateaaa() {
 	float delta = Timer::GetInstance().GetDeltaTime();
 
 	Move();
-	//UIButton();
 	
 	//寫很爛的player 無敵
 	if (m_player.isInvincibleCD)
@@ -52,7 +50,7 @@ void GameScene::Update() {
 	enemySpawnCd += delta;
 	if (enemySpawnCd > 0.20f) {
 
-		for(int i =0;i<300;i++)	SpawnEnemy();
+		for(int i =0;i<30;i++)	SpawnEnemy();
 		enemySpawnCd -= 0.20f;
 	}
 
@@ -63,17 +61,11 @@ void GameScene::Update() {
 		playerAtkCd -= 0.03f;
 	}
 
-	//std::cout << m_enemys.size() << std::endl;
-
 	PackInstanceData();
 }
 
 //IScene
 std::unique_ptr<IScene> GameScene::ChangeScene() {
-	if (m_player.HP <= 0){
-		auto nextScene = std::make_unique<ResultScene>();
-		return nextScene;
-	}
 	return nullptr;
 }
 

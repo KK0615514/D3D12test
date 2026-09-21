@@ -2,7 +2,9 @@
 
 void Timer::SetTargetFPS(int target_fps) {
     if (target_fps <= 0) target_fps = 60;
+
     m_frameTime = 1.0 / target_fps;
+    m_useYield = target_fps <= 100;
 }
 
 void Timer::StartFrame() {
@@ -17,8 +19,14 @@ void Timer::StartFrame() {
     }
 
     // 純FPS計算
-    double instantFPS = (m_deltaTime > 0.0) ? (1.0 / m_deltaTime) : 0.0;
-    m_currentFPS = (m_currentFPS * 0.95) + (instantFPS * 0.05);
+    fpsTimer += m_deltaTime;
+    frameCount++;
+
+    if (fpsTimer >= 1.0f) {
+        m_currentFPS = static_cast<int>(frameCount / fpsTimer + 0.5f);
+        frameCount = 0;
+        fpsTimer = 0.0f;
+    }
 }
 
 void Timer::EndFrame() {
@@ -32,14 +40,20 @@ void Timer::EndFrame() {
         return; // 不等 下幀對齊
     }
 
-    // sleep 保留 2ms 去做busy Wait
-    while (Clock::now() < m_nextFrameTarget - std::chrono::milliseconds(2)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-
     // Busy Wait
-    while (Clock::now() < m_nextFrameTarget) {
-        std::this_thread::yield();
+    if (m_useYield) {
+        // sleep 保留 2ms 去做busy Wait
+        while (Clock::now() < m_nextFrameTarget - std::chrono::milliseconds(1)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        while (Clock::now() < m_nextFrameTarget) {
+            std::this_thread::yield();
+        }
+    }
+    else {
+        while (Clock::now() < m_nextFrameTarget) {
+            // 高 FPS 下空轉比較準
+        }
     }
 }
 
