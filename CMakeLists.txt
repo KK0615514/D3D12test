@@ -22,11 +22,11 @@ add_executable(ECS
     "system/D3D12Engine.cpp"
     "system/QueueManager.cpp"  
     "system/ResourceManager.cpp"
-
+    "system/PipelineManager.cpp"  
+    "system/GlbLoader.cpp"
     "system/Timer.cpp"
 
     "scene/Game3DScene.cpp" 
-
 
     #以下全刪除
     "scene/GameScene.cpp"       
@@ -40,8 +40,7 @@ add_executable(ECS
 
 
     #可刪除 之後
-    "system/TextureManager.h"          "system/TextureManager.cpp"
-    "system/RenderManager.h"           "system/RenderManager.cpp"  
+    "system/TextureManager.h"          "system/TextureManager.cpp"       
 )
 
 #release設定下 關閉cmd窗口
@@ -57,16 +56,16 @@ endif()
 find_package(EnTT CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 
-add_library(stb INTERFACE)
-target_include_directories(stb INTERFACE "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include")
+add_library(vcpkg_headers INTERFACE)
+target_include_directories(vcpkg_headers  INTERFACE "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include")
 target_include_directories(ECS PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ECS PRIVATE 
     d3d12
     dxgi
 
-    imgui::imgui    #除錯用
-    EnTT::EnTT      #開源ecs
-    stb             #stb_image用
+    imgui::imgui            #除錯用
+    EnTT::EnTT              #開源ecs
+    vcpkg_headers           #stb_image , tinyglft
 
     #暫時用 聲音
     xaudio2

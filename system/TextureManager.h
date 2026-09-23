@@ -11,8 +11,8 @@ struct TextureHandle {
 };
 
 struct TextureData{	
-	ComPtr<ID3D12Resource> resource;			
-	uint32_t descriptorIndex;						//srv編號
+	ComPtr<ID3D12Resource>	 resource;			
+	uint32_t				 descriptorIndex;						//srv編號
 };
 
 class TextureManager{

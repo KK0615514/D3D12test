@@ -64,14 +64,7 @@ int main(int argc, char* argv[]) {
         //暫時用
         std::unique_ptr<IScene> nextScene = currentScene->ChangeScene();
         //if (nextScene != nullptr) currentScene = std::move(nextScene);
-        
-        static float abc = 0.0f;
-        abc += Timer::GetInstance().GetDeltaTime();
-        if (abc >= 1.0f) {
-            std::cout << Timer::GetInstance().GetFPS() << std::endl;
-            //std::cout << currentScene->m_enemys.size() << std::endl;
-            abc -= 1.0f;
-        }
+
 
         currentScene->Updateaaa();
 

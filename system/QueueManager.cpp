@@ -84,18 +84,28 @@ void QueueManager::WaitFrameReady(uint32_t currentFrame) {
 
 void QueueManager::SignalCurrentFrame(uint32_t currentFrame) {
     // 置結尾 一般render用fence函式 後+保證連續遞增規律
-    const uint64_t fenceValueToSignal = m_currentFenceValue;
-    m_commandQueueFenceValue[currentFrame] = fenceValueToSignal;
-    m_currentFenceValue++;
-
+    const uint64_t value = m_currentFenceValue++;
     // 送出fence  下幀在等
-    m_commandQueue->Signal(m_commandQueueFence.Get(), fenceValueToSignal);
+    Common::ThrowIfFailed(
+        m_commandQueue->Signal(m_commandQueueFence.Get(), value),
+        "幀末的fence失效"
+    );
+    m_commandQueueFenceValue[currentFrame] = value;
 }
 
 void QueueManager::FlushCommandQueue() {
-    m_currentFenceValue++;     //圖片上傳用的的fence函式 為了確定絕對在cmdlist最後 先+後送
-    m_commandQueue->Signal(m_commandQueueFence.Get(), m_currentFenceValue);
+    const uint64_t value = m_currentFenceValue++;
+    Common::ThrowIfFailed(
+        m_commandQueue->Signal(m_commandQueueFence.Get(), value),
+        "Flush 失敗"
+    );
 
-    m_commandQueueFence->SetEventOnCompletion(m_currentFenceValue, m_commandQueueFenceEvent);
-    WaitForSingleObject(m_commandQueueFenceEvent, INFINITE);
+    if (m_commandQueueFence->GetCompletedValue() < value) {
+        Common::ThrowIfFailed(
+            m_commandQueueFence->SetEventOnCompletion(value, m_commandQueueFenceEvent),
+            "Fence event設定失敗"
+        );
+        WaitForSingleObject(m_commandQueueFenceEvent, INFINITE);
+    }
 }
+    

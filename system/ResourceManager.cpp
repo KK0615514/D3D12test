@@ -1,5 +1,7 @@
 #include "ResourceManager.h"
 
+#include "GlbLoader.h"
+
 void ResourceManager::Init() {
     InitializeConstantBuffer();
     InitializeStructureBuffer();
@@ -9,6 +11,345 @@ void ResourceManager::Update(const IScene& currentScene, uint32_t currentFrame) 
     UpdatePerFrameCB(currentScene, currentFrame);
     UpdateInstanceSB(currentScene, currentFrame);
 }
+
+MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList) {
+    MeshGpuResource gpuMesh{};
+    gpuMesh.vertexCount = static_cast<uint32_t>(4);
+    gpuMesh.indexCount = static_cast<uint32_t>(6);
+
+    const uint64_t vbSize = gpuMesh.vertexCount * sizeof(Vertex);
+    const uint64_t ibSize = gpuMesh.indexCount * sizeof(uint32_t);
+
+    //建立default buffer
+    D3D12_HEAP_PROPERTIES heapProps{};
+    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_RESOURCE_DESC vbDesc{};
+    vbDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    vbDesc.Width = vbSize; // 緩衝區總大小
+    vbDesc.Height = 1;
+    vbDesc.DepthOrArraySize = 1;
+    vbDesc.MipLevels = 1;
+    vbDesc.Format = DXGI_FORMAT_UNKNOWN;
+    vbDesc.SampleDesc.Count = 1;
+    vbDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    Common::ThrowIfFailed(
+        m_device->CreateCommittedResource(
+            &heapProps,
+            D3D12_HEAP_FLAG_NONE,
+            &vbDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr,
+            IID_PPV_ARGS(&gpuMesh.vertexBuffer)),
+        "2D貼圖用default VB建立失敗"
+    );
+
+    D3D12_RESOURCE_DESC ibDesc = vbDesc;
+    ibDesc.Width = ibSize;
+
+    Common::ThrowIfFailed(
+        m_device->CreateCommittedResource(
+            &heapProps,
+            D3D12_HEAP_FLAG_NONE,
+            &ibDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr,
+            IID_PPV_ARGS(&gpuMesh.indexBuffer)),
+        "2D貼圖用default IB建立失敗"
+    );
+
+    //建立upload用buffer
+    D3D12_RESOURCE_DESC uploadVbDesc = vbDesc;
+
+    D3D12_HEAP_PROPERTIES uploadHeapProps{};
+    uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    Common::ThrowIfFailed(
+        m_device->CreateCommittedResource(
+            &uploadHeapProps,
+            D3D12_HEAP_FLAG_NONE,
+            &uploadVbDesc,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&gpuMesh.vertexUploadBuffer)),
+        "2D貼圖用upload VB建立失敗"
+    );
+
+    D3D12_RESOURCE_DESC uploadIbDesc = ibDesc;
+
+    Common::ThrowIfFailed(
+        m_device->CreateCommittedResource(
+            &uploadHeapProps,
+            D3D12_HEAP_FLAG_NONE,
+            &uploadIbDesc,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&gpuMesh.indexUploadBuffer)),
+        "2D貼圖用upload IB建立失敗"
+    );
+
+    // 寫入資料進VB
+    Vertex* pVertexDataBegin = nullptr;
+    D3D12_RANGE readRange = { 0, 0 };				// CPU 不需要讀取這段記憶體 設為空
+    gpuMesh.vertexUploadBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin));
+    for (size_t i = 0; i < 1; i++)
+    {
+        size_t vOffset = i * 4;
+
+        pVertexDataBegin[vOffset + 0] = Vertex{ { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f } }; // 左上 
+        pVertexDataBegin[vOffset + 1] = Vertex{ {  0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f } }; // 右上 
+        pVertexDataBegin[vOffset + 2] = Vertex{ {  0.5f,  0.5f, 0.0f }, { 1.0f, 1.0f } }; // 右下 
+        pVertexDataBegin[vOffset + 3] = Vertex{ { -0.5f,  0.5f, 0.0f }, { 0.0f, 1.0f } }; // 左下
+    }
+    gpuMesh.vertexUploadBuffer->Unmap(0, nullptr);
+
+    // 寫入資料進IB
+    uint32_t* pIndexDataBegin = nullptr;
+    gpuMesh.indexUploadBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pIndexDataBegin));
+    for (size_t i = 0;i < 1; i++)
+    {
+        size_t vOffset = i * 4; // 每個物件佔用 4 個頂點
+        size_t iOffset = i * 6; // 每個物件佔用 6 個索引
+
+        // 三角形 1
+        pIndexDataBegin[iOffset + 0] = static_cast<uint32_t>(vOffset + 0); //左上
+        pIndexDataBegin[iOffset + 1] = static_cast<uint32_t>(vOffset + 1); //右上
+        pIndexDataBegin[iOffset + 2] = static_cast<uint32_t>(vOffset + 2); //右下
+
+        // 三角形 2
+        pIndexDataBegin[iOffset + 3] = static_cast<uint32_t>(vOffset + 2); //右下
+        pIndexDataBegin[iOffset + 4] = static_cast<uint32_t>(vOffset + 3); //左下
+        pIndexDataBegin[iOffset + 5] = static_cast<uint32_t>(vOffset + 0); //左上
+    }
+    gpuMesh.indexUploadBuffer->Unmap(0, nullptr);
+
+    //複製資料進default buffer
+    m_commandList->CopyBufferRegion(
+        gpuMesh.vertexBuffer.Get(),
+        0,
+        gpuMesh.vertexUploadBuffer.Get(),
+        0,
+        vbSize
+    );
+    m_commandList->CopyBufferRegion(
+        gpuMesh.indexBuffer.Get(),
+        0,
+        gpuMesh.indexUploadBuffer.Get(),
+        0,
+        ibSize
+    );
+
+    // 把default狀態從copy切換回VB & IB
+    D3D12_RESOURCE_BARRIER barriers[2]{};
+
+    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[0].Transition.pResource = gpuMesh.vertexBuffer.Get();
+    barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+    barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[1].Transition.pResource = gpuMesh.indexBuffer.Get();
+    barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+    barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+    m_commandList->ResourceBarrier(2, barriers);
+
+    // 填寫VB View
+    gpuMesh.vertexBufferView.BufferLocation = gpuMesh.vertexBuffer->GetGPUVirtualAddress();
+    gpuMesh.vertexBufferView.SizeInBytes = static_cast<uint32_t>(vbSize);
+    gpuMesh.vertexBufferView.StrideInBytes = sizeof(Vertex);
+
+    // 填寫IB View
+    gpuMesh.indexBufferView.BufferLocation = gpuMesh.indexBuffer->GetGPUVirtualAddress();
+    gpuMesh.indexBufferView.SizeInBytes = static_cast<uint32_t>(ibSize);
+    gpuMesh.indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+
+    MeshHandle handle{
+    static_cast<uint32_t>(m_meshes.size())
+    };
+
+    m_meshes.push_back(std::move(gpuMesh));
+    return handle;
+}
+
+MeshHandle ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList) {
+    MeshData meshData = LoadGlbMeshData(path);
+
+    if (meshData.vertices.empty() || meshData.indices.empty()) {
+        throw std::runtime_error("GLB 沒有資料");
+    }
+
+    MeshGpuResource gpuMesh{};
+    gpuMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
+    gpuMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
+
+    //設定uint64_t 避免模型太大截斷
+    const uint64_t vbSize = uint64_t(meshData.vertices.size()) * sizeof(MeshVertex);
+    const uint64_t ibSize = uint64_t(meshData.indices.size()) * sizeof(uint32_t);
+    if (vbSize > UINT32_MAX || ibSize > UINT32_MAX)
+        throw std::runtime_error("Mesh buffer is too large");
+
+    //建立default buffer
+    D3D12_RESOURCE_DESC vbDesc{};   
+    vbDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    vbDesc.Width = vbSize;
+    vbDesc.Height = 1;
+    vbDesc.DepthOrArraySize = 1;
+    vbDesc.MipLevels = 1;
+    vbDesc.Format = DXGI_FORMAT_UNKNOWN;
+    vbDesc.SampleDesc.Count = 1;
+    vbDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    D3D12_HEAP_PROPERTIES heapProps{};
+    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    Common::ThrowIfFailed(
+        m_device->CreateCommittedResource(
+            &heapProps,
+            D3D12_HEAP_FLAG_NONE,
+            &vbDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr,
+            IID_PPV_ARGS(&gpuMesh.vertexBuffer)),
+        "Mesh用default VB建立失敗"
+    );
+
+    D3D12_RESOURCE_DESC ibDesc = vbDesc;
+    ibDesc.Width = ibSize;
+
+    Common::ThrowIfFailed(
+        m_device->CreateCommittedResource(
+            &heapProps,
+            D3D12_HEAP_FLAG_NONE,
+            &ibDesc,
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr,
+            IID_PPV_ARGS(&gpuMesh.indexBuffer)),
+        "Mesh用default IB建立失敗"
+    );
+
+    //建立upload用buffer
+    D3D12_RESOURCE_DESC uploadVbDesc = vbDesc;
+
+    D3D12_HEAP_PROPERTIES uploadHeapProps{};
+    uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    Common::ThrowIfFailed(
+        m_device->CreateCommittedResource(
+            &uploadHeapProps,
+            D3D12_HEAP_FLAG_NONE,
+            &uploadVbDesc,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&gpuMesh.vertexUploadBuffer)),
+        "Mesh用upload VB建立失敗"
+    );
+
+    D3D12_RESOURCE_DESC uploadIbDesc = ibDesc;
+
+    Common::ThrowIfFailed(
+        m_device->CreateCommittedResource(
+            &uploadHeapProps,
+            D3D12_HEAP_FLAG_NONE,
+            &uploadIbDesc,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&gpuMesh.indexUploadBuffer)),
+        "Mesh用upload IB建立失敗"
+    );
+
+    //上傳資料 進upload vb
+    void* mappedVbData = nullptr;
+    D3D12_RANGE readRange = { 0,0 };
+    Common::ThrowIfFailed(
+        gpuMesh.vertexUploadBuffer->Map(0, &readRange, &mappedVbData),
+        "Mesh VB 資料上傳失敗"
+    );
+    memcpy(mappedVbData,
+        meshData.vertices.data(),
+        vbSize
+    );
+    gpuMesh.vertexUploadBuffer->Unmap(0, nullptr);
+
+    //上傳資料 進upload ib
+    void* mappedIbData = nullptr;
+    Common::ThrowIfFailed(
+        gpuMesh.indexUploadBuffer->Map(0, &readRange, &mappedIbData),
+        "Mesh IB 資料上傳失敗"
+    );
+
+    memcpy(mappedIbData,
+        meshData.indices.data(),
+        ibSize
+    );
+    gpuMesh.indexUploadBuffer->Unmap(0, nullptr);
+
+    //複製資料 進default vb ib
+    m_commandList->CopyBufferRegion(
+        gpuMesh.vertexBuffer.Get(),
+        0,
+        gpuMesh.vertexUploadBuffer.Get(),
+        0,
+        vbSize
+    );
+    m_commandList->CopyBufferRegion(
+        gpuMesh.indexBuffer.Get(),
+        0,
+        gpuMesh.indexUploadBuffer.Get(),
+        0,
+        ibSize
+    );
+
+    // 把default狀態從copy切換回VB & IB
+    D3D12_RESOURCE_BARRIER barriers[2]{};
+
+    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[0].Transition.pResource     = gpuMesh.vertexBuffer.Get();
+    barriers[0].Transition.StateBefore   = D3D12_RESOURCE_STATE_COPY_DEST;
+    barriers[0].Transition.StateAfter    = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+    barriers[0].Transition.Subresource   = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[1].Transition.pResource     = gpuMesh.indexBuffer.Get();
+    barriers[1].Transition.StateBefore   = D3D12_RESOURCE_STATE_COPY_DEST;
+    barriers[1].Transition.StateAfter    = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+    barriers[1].Transition.Subresource   = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+    m_commandList->ResourceBarrier(2, barriers);
+
+    // 填寫VB View
+    gpuMesh.vertexBufferView.BufferLocation = gpuMesh.vertexBuffer->GetGPUVirtualAddress();
+    gpuMesh.vertexBufferView.SizeInBytes = static_cast<uint32_t>(vbSize);
+    gpuMesh.vertexBufferView.StrideInBytes = sizeof(MeshVertex);
+
+    // 填寫IB View
+    gpuMesh.indexBufferView.BufferLocation = gpuMesh.indexBuffer->GetGPUVirtualAddress();
+    gpuMesh.indexBufferView.SizeInBytes = static_cast<uint32_t>(ibSize);
+    gpuMesh.indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+
+    MeshHandle handle{
+        static_cast<uint32_t>(m_meshes.size())
+    };
+
+    m_meshes.push_back(std::move(gpuMesh));
+    return handle;
+}
+
+const MeshGpuResource& ResourceManager::GetMesh(MeshHandle handle) const {
+    return m_meshes.at(handle.id);
+}
+
+void ResourceManager::ClearUploadBuffer() {
+    for (auto& mesh : m_meshes) {
+        mesh.indexUploadBuffer.Reset();
+        mesh.vertexUploadBuffer.Reset();
+    }
+}
+
+
 
 void ResourceManager::InitializeConstantBuffer() {
     D3D12_HEAP_PROPERTIES heapProps = {};

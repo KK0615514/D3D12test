@@ -5,8 +5,16 @@
 #include "ResourceManager.h"
 
 #include "TextureManager.h"
-#include "RenderManager.h"
+#include "PipelineManager.h"
 
+//test
+#include <optional>
+
+enum class RootSlot : uint16_t {
+	TextureTable = 0,
+	InstanceBuffer = 1,
+	PerFrameConstant = 2
+};
 
 class RenderSystem
 {
@@ -30,22 +38,31 @@ public:
 	};
 
 private:
-	//拆掉 cbv sb 
-	 std::unique_ptr<D3D12Engine>		m_d3d12Engine;
-	 std::unique_ptr<QueueManager>		m_queueManager;
-	 std::unique_ptr<ResourceManager>	m_resourceManager;
+	 std::unique_ptr<D3D12Engine>			m_d3d12Engine;
+	 std::unique_ptr<QueueManager>			m_queueManager;
+	 std::unique_ptr<ResourceManager>		m_resourceManager;
+	 std::unique_ptr<PipelineManager>		m_pipelineManager;
 
-	 //後續增加 psoManager 拆掉VB IB
-	 std::unique_ptr<RenderManager>		m_renderManager;
-
-	 //後續新增buffer manager
+	 //後續新增resource manager
 	 std::unique_ptr<TextureManager>	m_textureManager;
+
+	 //test
+	 std::optional<MeshHandle> m_textureMesh;
+	 std::optional<MeshHandle> m_testMesh;
 
 	 //視窗與裁切規格	如果要小地圖等功能可多個
 	 D3D12_VIEWPORT						screenViewport{};
 	 D3D12_RECT							scissorRect{};
 
-	 void SetViewPortAndScissorRect();
+	 void ClearBackBuffer(uint32_t currentFrame);
+	 void BindGlobalRenderResource(uint32_t currentFrame);
+	 void SetViewAndScissor();
+	 void DrawTexturePass();
+
+	 //test
+	 void DrawMeshPass();
+ 
+	 void InitializeViewPortAndScissorRect();
 	 void LoadTexture();
 
 	 RenderSystem() = default;
