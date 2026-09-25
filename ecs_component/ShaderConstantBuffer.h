@@ -2,19 +2,11 @@
 #include <DirectXMath.h>
 
 struct PerFrameConstant {
-	DirectX::XMFLOAT4X4 View;				// 64 bytes camera
-	DirectX::XMFLOAT4X4 Proj;				// 64 bytes camera
+	//DirectX::XMFLOAT4X4 View;				// 64 bytes camera
+	//DirectX::XMFLOAT4X4 Proj;				// 64 bytes camera
 	DirectX::XMFLOAT4X4 ViewProj;			// 64 bytes camera
 	DirectX::XMFLOAT3   CameraPos;			// 12 bytes camera
 	float padding;							//  4 bytes
-};
-
-//複製貼上
-struct TextRootConstants {
-	uint32_t asciiCode;        // 文字的 ASCII 碼 (例如 'A' = 65)
-	uint32_t textColor;        // 文字顏色 (如 0xFFFFFFFF)
-	uint32_t fontTextureIndex;   // 文字圖集在描述符表中的索引 (填入 6)
-	uint32_t padding;          // 填充對齊
 };
 
 struct PerViewConstant {

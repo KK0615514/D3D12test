@@ -5,15 +5,32 @@
 
 #include "CommonUtils.h"
 
-//test			可刪除
-#include "scene/GameScene.h"
-
 using Microsoft::WRL::ComPtr;
 
 class D3D12Engine {
 public:
+	D3D12Engine() = default;
+	~D3D12Engine() = default;
+
+	void InitRootSig();
+	void InitDevice();
+	void InitSwapChain(HWND hwnd, ID3D12CommandQueue* Queue);
+
+	void Update();
+	void Shutdown();
+
+	void UpdateSwapChainBackBufferIndex();
+
+	ID3D12Device4*			GetDevice();
+	ID3D12RootSignature*	GetRootsig();
+	ID3D12Resource*			GetBackBuffer();
+	ID3D12DescriptorHeap*	GetRtvHeap();
+	uint32_t				GetRtvDescriptorSize();
+	uint32_t				GetFrameIndex();
+
+private:
 	static constexpr uint32_t FrameCount = Common::BackBufferCount;
-	
+
 	//核心硬體物件
 	ComPtr<IDXGIFactory6>				m_factory;				// 4 必須撈出所有顯卡後依需求計算要哪張 6支援關鍵字搜尋
 	ComPtr<IDXGIAdapter4>				m_adapter;				// 我也看不懂差在哪裡
@@ -28,25 +45,9 @@ public:
 	//當前SwapChain的Buffer編號
 	uint32_t							m_frameIndex = 0;
 
-	uint32_t							m_height = 720;
-	uint32_t							m_width = 1280;
+	uint32_t							m_height;
+	uint32_t							m_width;
 
 	//Root Signature
 	ComPtr<ID3D12RootSignature>			m_rootSignature;
-
-public:
-	D3D12Engine() = default;
-	~D3D12Engine() = default;
-
-	void InitRootSig();
-	void InitDevice();
-	void InitSwapChain(HWND hwnd, ID3D12CommandQueue* Queue);
-
-	void Update();
-	void Shutdown();
-
-	void UpdateSwapChainBackBufferIndex();
-
-private:
-
 };

@@ -1,3 +1,19 @@
+struct InstanceData
+{
+    float4x4 Transform;
+    uint TextureIndex;
+    uint3 Padding;
+};
+
+StructuredBuffer<InstanceData> gInstances : register(t0, space1);
+
+cbuffer PerFrameConstant : register(b0)
+{
+    float4x4 ViewProj;
+    float3 CameraPos;
+    float Padding;
+};
+
 struct VSInput
 {
     float3 position : POSITION;
@@ -10,12 +26,14 @@ struct VSOutput
     float3 color : COLOR0;
 };
 
-VSOutput VSMain(VSInput input)
+VSOutput VSMain(VSInput input, uint instanceID : SV_InstanceID)
 {
-    VSOutput output;
+    InstanceData instance = gInstances[instanceID];
 
-    // 暫時把模型的 XY 當成畫面座標；0.5 是測試用縮放。
-    output.position = float4(input.position.xy * 0.5f, 0.5f, 1.0f);
+    VSOutput output;
+    float4 worldPosition = mul(float4(input.position, 1.0f),
+                               instance.Transform);
+    output.position = mul(worldPosition, ViewProj);
     output.color = abs(input.normal);
     return output;
 }

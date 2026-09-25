@@ -7,11 +7,10 @@
 #include "CommonUtils.h"
 #include "MeshData.h"
 
-//test	注意調整後面func傳入參數 
-#include "scene/GameScene.h"
+#include "scene/IScene.h"
 
-#include "ShaderStructureBuffer.h"
-#include "ShaderConstantBuffer.h"
+#include "ecs_component/ShaderStructureBuffer.h"
+#include "ecs_component/ShaderConstantBuffer.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -37,21 +36,19 @@ struct MeshGpuResource {
 
 //目前全部CommitResource
 class ResourceManager {
+
+//改成placedbuffer後清理下面的public
 public:
 	static constexpr uint32_t FrameCount = Common::BackBufferCount;
-
-	ComPtr<ID3D12Device4>				m_device;
-
 	//constant buffer 
 	static const uint32_t				MaxCBVsPerFrame = 3;						//每個Frame最多幾個cbv
 	ComPtr<ID3D12Resource>				m_constantBuffer[FrameCount][MaxCBVsPerFrame];
-	void*								m_cbvCpuAdress[FrameCount][MaxCBVsPerFrame] = { nullptr };
+	void* m_cbvCpuAdress[FrameCount][MaxCBVsPerFrame] = { nullptr };
 
 	//sturcture buffer
 	const size_t						MAX_ELEMENTS = 10000;      // 物件上限
 	ComPtr<ID3D12Resource>				m_structureBuffer[FrameCount];
-	InstanceData*						m_structureBufferCpuAddress[FrameCount] = { nullptr };
-
+	InstanceData* m_structureBufferCpuAddress[FrameCount] = { nullptr };
 public:
 	ResourceManager(ID3D12Device4* device) :m_device(device) {};
 	~ResourceManager() = default;
@@ -59,16 +56,17 @@ public:
 	void Init();
 	void Update(const IScene& currentScene, uint32_t currentFrame);
 
-	//載入2D用的 VB*4 IB*6 
-	MeshHandle Load2DMesh(ID3D12GraphicsCommandList1* m_commandList);
-
+	MeshHandle Load2DMesh(ID3D12GraphicsCommandList1* m_commandList);		//載入2D用的 VB*4 IB*6 
 	MeshHandle LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList);
-	const MeshGpuResource& GetMesh(MeshHandle handle) const;
+	void TransitionMeshBuffer(std::vector<MeshGpuResource>meshes, ID3D12GraphicsCommandList1* m_commandList);
 	void ClearUploadBuffer();
 
+	const MeshGpuResource& GetMesh(MeshHandle handle) const;
+
 private:
-	std::vector<MeshGpuResource> m_meshes;
-	
+	ComPtr<ID3D12Device4>			m_device;
+	std::vector<MeshGpuResource>	m_meshes;
+
 	void InitializeConstantBuffer();
 	void InitializeStructureBuffer();
 

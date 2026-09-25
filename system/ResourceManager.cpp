@@ -12,6 +12,8 @@ void ResourceManager::Update(const IScene& currentScene, uint32_t currentFrame) 
     UpdateInstanceSB(currentScene, currentFrame);
 }
 
+
+
 MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList) {
     MeshGpuResource gpuMesh{};
     gpuMesh.vertexCount = static_cast<uint32_t>(4);
@@ -139,23 +141,6 @@ MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList
         0,
         ibSize
     );
-
-    // 把default狀態從copy切換回VB & IB
-    D3D12_RESOURCE_BARRIER barriers[2]{};
-
-    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barriers[0].Transition.pResource = gpuMesh.vertexBuffer.Get();
-    barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-    barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barriers[1].Transition.pResource = gpuMesh.indexBuffer.Get();
-    barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
-    barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-    m_commandList->ResourceBarrier(2, barriers);
 
     // 填寫VB View
     gpuMesh.vertexBufferView.BufferLocation = gpuMesh.vertexBuffer->GetGPUVirtualAddress();
@@ -303,23 +288,6 @@ MeshHandle ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommandList
         ibSize
     );
 
-    // 把default狀態從copy切換回VB & IB
-    D3D12_RESOURCE_BARRIER barriers[2]{};
-
-    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barriers[0].Transition.pResource     = gpuMesh.vertexBuffer.Get();
-    barriers[0].Transition.StateBefore   = D3D12_RESOURCE_STATE_COPY_DEST;
-    barriers[0].Transition.StateAfter    = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-    barriers[0].Transition.Subresource   = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barriers[1].Transition.pResource     = gpuMesh.indexBuffer.Get();
-    barriers[1].Transition.StateBefore   = D3D12_RESOURCE_STATE_COPY_DEST;
-    barriers[1].Transition.StateAfter    = D3D12_RESOURCE_STATE_INDEX_BUFFER;
-    barriers[1].Transition.Subresource   = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-    m_commandList->ResourceBarrier(2, barriers);
-
     // 填寫VB View
     gpuMesh.vertexBufferView.BufferLocation = gpuMesh.vertexBuffer->GetGPUVirtualAddress();
     gpuMesh.vertexBufferView.SizeInBytes = static_cast<uint32_t>(vbSize);
@@ -338,8 +306,24 @@ MeshHandle ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommandList
     return handle;
 }
 
-const MeshGpuResource& ResourceManager::GetMesh(MeshHandle handle) const {
-    return m_meshes.at(handle.id);
+void ResourceManager::TransitionMeshBuffer(std::vector<MeshGpuResource>meshes, ID3D12GraphicsCommandList1* m_commandList) {
+    for (auto& mesh : meshes) {
+        D3D12_RESOURCE_BARRIER barriers[2]{};
+
+        barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barriers[0].Transition.pResource = mesh.vertexBuffer.Get();
+        barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+        barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+        barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barriers[1].Transition.pResource = mesh.indexBuffer.Get();
+        barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+        barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+        m_commandList->ResourceBarrier(2, barriers);
+    }
 }
 
 void ResourceManager::ClearUploadBuffer() {
@@ -347,6 +331,10 @@ void ResourceManager::ClearUploadBuffer() {
         mesh.indexUploadBuffer.Reset();
         mesh.vertexUploadBuffer.Reset();
     }
+}
+
+const MeshGpuResource& ResourceManager::GetMesh(MeshHandle handle) const {
+    return m_meshes.at(handle.id);
 }
 
 
@@ -428,29 +416,32 @@ void ResourceManager::InitializeStructureBuffer() {
 }
 
 void ResourceManager::UpdatePerFrameCB(const IScene& currentScene,uint32_t currentFrame){
-    float windowWidth = 1280.0f;
-    float windowHeight = 720.0f;
+    const float width = Common::InitialWindowWidth;
+    const float height = Common::InitialWindowHeight;
 
-    //寫死的camera
-    DirectX::XMFLOAT2 camPos = { 0.0f, 0.0f };   // 相看著世界坐標的 (0,0)
-    float camRotation = 0.0f;                    // 角度
-    float camZoom = 1.0f;                        // 縮放倍率
+    const auto eye = DirectX::XMVectorSet(0.0f, 0.0f, 5.0f, 1.0f);
+    const auto target = DirectX::XMVectorZero();
+    const auto up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
-    DirectX::XMMATRIX projMat = DirectX::XMMatrixOrthographicOffCenterLH(0.0f, windowWidth, windowHeight, 0.0f, -1.0f, 1.0);
-    DirectX::XMMATRIX viewMat = DirectX::XMMatrixIdentity();                        //單位矩陣
-    DirectX::XMMATRIX viewProjMat = DirectX::XMMatrixMultiply(viewMat, projMat);    //矩陣乘法
+    const auto view = DirectX::XMMatrixLookAtLH(eye, target, up);
+    const auto proj = DirectX::XMMatrixPerspectiveFovLH(
+        DirectX::XMConvertToRadians(60.0f),
+        width / height,
+        0.1f,
+        100.0f
+    );
 
     PerFrameConstant cbData;
-    DirectX::XMStoreFloat4x4(&cbData.View, DirectX::XMMatrixTranspose(viewMat));
-    DirectX::XMStoreFloat4x4(&cbData.Proj, DirectX::XMMatrixTranspose(projMat));
-    DirectX::XMStoreFloat4x4(&cbData.ViewProj, DirectX::XMMatrixTranspose(viewProjMat));
-    cbData.CameraPos = DirectX::XMFLOAT3(camPos.x, camPos.y, 0.0f);
-    cbData.padding = 0.0f;
+    DirectX::XMStoreFloat4x4(
+        &cbData.ViewProj,
+        DirectX::XMMatrixTranspose(view * proj)
+    );
+    cbData.CameraPos = { 0.0f, 0.0f, -5.0f };
 
-    //cbv裡面只有一個物件 不用對齊
     memcpy(m_cbvCpuAdress[currentFrame][0], &cbData, sizeof(cbData));
 }
 
+//之後改成看單子
 void ResourceManager::UpdateInstanceSB(const IScene& currentScene,uint32_t currentFrame){
     memcpy(m_structureBufferCpuAddress[currentFrame],
         currentScene.InstanceDatas.data(),

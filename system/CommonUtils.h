@@ -14,6 +14,11 @@
 #include <string>			//LoadBinaryFile
 
 namespace Common {
+
+	inline float InitialWindowWidth		= 1280.0f;
+
+	inline float InitialWindowHeight	= 720.0f;
+
 	//雙緩衝
 	inline constexpr uint32_t BackBufferCount = 2;
 

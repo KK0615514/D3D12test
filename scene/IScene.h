@@ -1,44 +1,36 @@
 #pragma once
 #include <memory>
 #include <vector>
+#include "entt/entt.hpp"
 
-#include "../system/Timer.h"
-#include "../system/Random.h"
-#include "../system/InputManager.h"
+#include "system/Timer.h"
+#include "system/InputManager.h"
 
-//可刪除
-#include "../system/ShaderStructureBuffer.h" 
-//可刪除
-#include "../gameobject/Enemy.h"
-#include "../gameobject/Player.h"
-#include "../gameobject/Bullet.h"
-#include "../gameobject/Crosshair.h"
-#include "../gameobject/UI.h"
-#include "../gameobject/Text.h"
+//看情況調整
+#include "ecs_component/ShaderStructureBuffer.h" 
+#include "ecs_component/ShaderConstantBuffer.h" 
 
-inline int finalscore{0};
 
-enum class SceneType {
-    Menu,
-    Game,
-    Result
+struct Transform {
+    DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };
+    DirectX::XMFLOAT4 rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
+    DirectX::XMFLOAT3 scale{ 1.0f, 1.0f, 1.0f };
+};
+
+struct Camera {
+    float fovY{};
+    float nearZ{};
+    float farZ{};
 };
 
 class IScene {
 public:
+    //之後改成填單子
     std::vector<InstanceData> InstanceDatas;
     uint32_t instanceCounts;
 
-    Player m_player{};
-    Crosshair m_crosshair{};
-    std::vector<Enemy> m_enemys;
-    std::vector<Bullet>m_bullets;
-    std::vector <UI> m_UI;
-    int m_score{0};
-    SceneType currentScene;
-
+public:
     virtual ~IScene() = default;
-    virtual void Updateaaa() = 0;
-    virtual std::unique_ptr<IScene> ChangeScene() = 0;
-    virtual uint32_t PackInstanceData() = 0;
+    virtual void Update() = 0;
+
 };

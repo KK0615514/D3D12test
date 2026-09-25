@@ -26,20 +26,12 @@ add_executable(ECS
     "system/GlbLoader.cpp"
     "system/Timer.cpp"
 
-    "scene/Game3DScene.cpp" 
+    "scene/Game3DScene.cpp"   
 
-    #以下全刪除
-    "scene/GameScene.cpp"       
+    #Entt
+    "ecs_system/CameraSystem.cpp"
 
-    #以下全刪除
-    "gameobject/Enemy.h" 
-    "gameobject/Player.h"  
-    "gameobject/Bullet.h" "gameobject/Crosshair.h" "gameobject/UI.h"
-    "gameobject/Audio.h"  "gameobject/Audio.cpp" 
-    "gameobject/Text.h"
-
-
-    #可刪除 之後
+    #可刪除 placedresoource實作以前不動 
     "system/TextureManager.h"          "system/TextureManager.cpp"       
 )
 

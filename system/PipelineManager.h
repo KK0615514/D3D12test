@@ -12,7 +12,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-enum class PsoType {
+enum class PsoType: size_t {
 	TextureLoader,
 	TextLoader,
 	MeshDebug,
@@ -35,7 +35,5 @@ private:
 	std::array<ComPtr<ID3D12PipelineState> , static_cast<size_t>(PsoType::Count)>	m_psos;
 
 	void InitializePSO();
-
-	//test
-	void InitMeshPSO();
+	void InitMeshPSO();		//test
 };

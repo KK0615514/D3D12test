@@ -13,16 +13,12 @@
 #include "system/InputManager.h"
 #include "system/Window.h"
 
-//可刪除
-#include "scene/GameScene.h"
-
-//複製貼上
-#include "gameobject/Audio.h"
+#include "scene/Game3DScene.h"
 
 int main(int argc, char* argv[]) {
     // 取得模組實例控制代碼    // 建立視窗
-    int windowWidth = 1280;
-    int windowHeight = 720;
+    uint32_t windowWidth      = static_cast<uint32_t>(Common::InitialWindowWidth);
+    uint32_t windowHeight     = static_cast<uint32_t>(Common::InitialWindowHeight);
     HINSTANCE hInstance = GetModuleHandle(NULL);
     HWND hwnd = CreateNativeWindow(windowWidth, windowHeight, hInstance);
     if (!hwnd) {
@@ -38,12 +34,8 @@ int main(int argc, char* argv[]) {
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
 
-    //初始Scene設定 複製的audio 
-    std::unique_ptr<IScene> currentScene = std::make_unique<GameScene>();
-    if (!SimpleAudio::Get().Initialize()) {
-        MessageBoxW(NULL, L"XAudio2 初始化失敗！", L"錯誤", MB_OK);
-        return -1;
-    }
+    //初始Scene設定 
+    std::unique_ptr<IScene> currentScene = std::make_unique<Game3DScene>();
 
     // ─── 主迴圈 ───
     MSG msg = {};
@@ -61,12 +53,7 @@ int main(int argc, char* argv[]) {
 
         Timer::GetInstance().StartFrame();
 
-        //暫時用
-        std::unique_ptr<IScene> nextScene = currentScene->ChangeScene();
-        //if (nextScene != nullptr) currentScene = std::move(nextScene);
-
-
-        currentScene->Updateaaa();
+        currentScene->Update();
 
         RenderSystem::GetInstance().Update(*currentScene);
         RenderSystem::GetInstance().Render();

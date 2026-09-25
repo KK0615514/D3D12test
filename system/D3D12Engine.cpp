@@ -41,6 +41,9 @@ void D3D12Engine::InitDevice() {
 }
 
 void D3D12Engine::InitSwapChain(HWND hwnd, ID3D12CommandQueue* Queue){
+    m_width     = static_cast<uint32_t>(Common::InitialWindowWidth);
+    m_height    = static_cast<uint32_t>(Common::InitialWindowHeight);
+
     // 建立SwapChain
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc{};       //無印已被淘汰
     swapChainDesc.BufferCount = FrameCount;
@@ -171,4 +174,28 @@ void D3D12Engine::Shutdown() {
 void D3D12Engine::UpdateSwapChainBackBufferIndex() {
     m_swapChain->Present(0, 0);//DXGI_PRESENT_ALLOW_TEARING
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+}
+
+ID3D12Device4* D3D12Engine::GetDevice() {
+    return m_device.Get();
+}
+
+ID3D12RootSignature* D3D12Engine::GetRootsig() {
+    return m_rootSignature.Get();
+}
+
+ID3D12Resource* D3D12Engine::GetBackBuffer() {
+    return m_renderTargets[m_frameIndex].Get();
+}
+
+ID3D12DescriptorHeap* D3D12Engine::GetRtvHeap() {
+    return m_rtvHeap.Get();
+}
+
+uint32_t D3D12Engine::GetRtvDescriptorSize() {
+    return m_rtvDescriptorSize;
+}
+
+uint32_t D3D12Engine::GetFrameIndex() {
+    return m_frameIndex;
 }

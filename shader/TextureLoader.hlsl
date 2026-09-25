@@ -23,8 +23,6 @@ StructuredBuffer<ObjectData> gInstanceBuffer : register(t0, space1);
 
 cbuffer PerFrameConstant : register(b0)
 {
-    matrix g_View;
-    matrix g_Proj;
     matrix g_ViewProj; //***
     float3 cameraPos;
     float1 padding;

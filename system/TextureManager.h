@@ -10,6 +10,7 @@ struct TextureHandle {
 	uint32_t id; // 或者叫 descriptorIndex [1]
 };
 
+//名字對齊 resource meshGpuResource
 struct TextureData{	
 	ComPtr<ID3D12Resource>	 resource;			
 	uint32_t				 descriptorIndex;						//srv編號
@@ -28,7 +29,6 @@ public:
 
 private:
 	ComPtr<ID3D12Device4> m_device;
-
 	
 	uint32_t m_descriptorSize = 0;								//Init時取得srv Descriptor Heap大小
 	uint32_t m_allocatedCount = 0;
