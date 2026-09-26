@@ -1,5 +1,7 @@
 #include "RenderSystem.h"
 
+#include "system/RenderData.h"
+
 void RenderSystem::Init(HWND hwnd) {
     m_d3d12Engine = std::make_unique<D3D12Engine>();
     m_d3d12Engine->InitDevice();      //queue需要device swapchain需要queue 逼不得已
@@ -70,12 +72,20 @@ void RenderSystem::LoadTexture() {
     m_resourceManager->ClearUploadBuffer();
 }
 
-// 流程有待簡化
-void RenderSystem::Render() {
+// 現在每幀fence等待是在這裡 之後要修改 不然太醜
+void RenderSystem::Update(const SceneRenderData& data) {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
 
     //一幀的開始 啟用direct queue
     m_queueManager->WaitFrameReady(QueueType::Direct, currentFrame);
+    //目前Iscene 只持有一組vector + InstanceCount
+    m_resourceManager->Update(data, currentFrame);       //更新CB SB
+}
+
+// 流程有待簡化
+void RenderSystem::Render(const SceneRenderData& data) {
+    uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
+
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
 
     BindGlobalRenderResource(currentFrame);
@@ -85,7 +95,7 @@ void RenderSystem::Render() {
     //目前無2D物件
     //DrawTexturePass();
     //test
-    DrawMeshPass();
+    DrawMeshPass(data);
     TransitionBackBuffer(currentFrame);
 
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
@@ -155,8 +165,8 @@ void RenderSystem::ClearBackBuffer(uint32_t currentFrame) {
     cmdList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
 }
 
-// Render流程 - 4 Pass
-void RenderSystem::DrawTexturePass(){
+// Render流程 - 4 Pass            有待修改 現在count 是亂填的 等到handle做完 才能完整
+void RenderSystem::DrawTexturePass(const SceneRenderData& data){
     if (!m_textureMesh) return;
     const auto& mesh = m_resourceManager->GetMesh(*m_textureMesh);
     ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
@@ -168,20 +178,27 @@ void RenderSystem::DrawTexturePass(){
     cmdList->IASetVertexBuffers(0, 1, &mesh.vertexBufferView);
     cmdList->IASetIndexBuffer(&mesh.indexBufferView);
     //實際作畫
-    cmdList->DrawIndexedInstanced(mesh.indexCount, InstanceCounts, 0, 0, 0);
+    cmdList->DrawIndexedInstanced(mesh.indexCount, 1, 0, 0, 0);
 }
 
-// Render流程 - 4 test Pass
-void RenderSystem::DrawMeshPass() {
-    if (!m_testMesh) return;
-    const auto& mesh = m_resourceManager->GetMesh(*m_testMesh);
-    ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
+// Render流程 - 4 test Pass       有待修改 現在count 是亂填的 等到handle做完 才能完整
+void RenderSystem::DrawMeshPass(const SceneRenderData& data) {
 
-    cmdList->SetPipelineState(m_pipelineManager->GetPso(PsoType::MeshDebug));
+    //刪除
+    if (!m_testMesh) return;
+
+    ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
     cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    cmdList->IASetVertexBuffers(0, 1, &mesh.vertexBufferView);
-    cmdList->IASetIndexBuffer(&mesh.indexBufferView);
-    cmdList->DrawIndexedInstanced(mesh.indexCount, InstanceCounts, 0, 0, 0);
+
+    for (const auto& batch : data.batches) {
+        //改
+        const auto& mesh = m_resourceManager->GetMesh(*m_testMesh);
+        cmdList->SetPipelineState(m_pipelineManager->GetPso(PsoType::MeshDebug));
+
+        cmdList->IASetVertexBuffers(0, 1, &mesh.vertexBufferView);
+        cmdList->IASetIndexBuffer(&mesh.indexBufferView);
+        cmdList->DrawIndexedInstanced(mesh.indexCount, batch.instanceCount, 0, 0, batch.instanceOffset);
+    }
 }
 
 // Render流程 - 5 切換Barrier到呈現狀態
@@ -200,15 +217,15 @@ void RenderSystem::TransitionBackBuffer(uint32_t currentFrame) {
 
 
 
-// 臨時用的 改成0複製 or entt 打包好的 1複製
-void RenderSystem::Update(IScene& currentScene) {
-    uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
-
-    //目前Iscene 只持有一組vector + InstanceCount
-    m_resourceManager->Update(currentScene, currentFrame);       //更新CB SB
-    InstanceCounts = currentScene.instanceCounts;
-}
-
 void RenderSystem::Shutdown() {
 
 }
+
+
+/*
+handle存取做完 
+    動loadtexture 改名字 改流程 
+    動兩個pass 
+
+單子系統整體弄完 回頭弄update 跟render 不然現在很醜
+*/

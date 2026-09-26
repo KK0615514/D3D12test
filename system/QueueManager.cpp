@@ -1,5 +1,12 @@
 #include "QueueManager.h"
 
+CommandQueueContext::~CommandQueueContext() {
+    if (fenceEvent) {
+        CloseHandle(fenceEvent);
+        fenceEvent = nullptr;
+    }
+}
+    
 void QueueManager::Init() {
 	InitializeCommandQueue();
 	InitializeCommandList();

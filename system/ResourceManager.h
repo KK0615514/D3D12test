@@ -7,17 +7,12 @@
 #include "CommonUtils.h"
 #include "MeshData.h"
 
-#include "scene/IScene.h"
+#include "system/RenderHandle.h"
 
 #include "ecs_component/ShaderStructureBuffer.h"
 #include "ecs_component/ShaderConstantBuffer.h"
 
 using Microsoft::WRL::ComPtr;
-
-// 物件handle
-struct MeshHandle {
-	uint32_t id; // 或者叫 descriptorIndex [1]
-};
 
 // 物件資料
 struct MeshGpuResource {
@@ -33,6 +28,9 @@ struct MeshGpuResource {
 	uint32_t indexCount = 0;
 	uint32_t vertexCount = 0;
 };
+
+// 向前宣告 渲染單子 
+struct SceneRenderData;
 
 //目前全部CommitResource
 class ResourceManager {
@@ -57,7 +55,7 @@ public:
 	~ResourceManager() = default;
 
 	void Init();
-	void Update(const IScene& currentScene, uint32_t currentFrame);
+	void Update(const SceneRenderData& data, uint32_t currentFrame);
 
 	MeshHandle Load2DMesh(ID3D12GraphicsCommandList1* m_commandList);		//載入2D用的 VB*4 IB*6 
 	MeshHandle LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList);
@@ -73,6 +71,6 @@ private:
 	void InitializeConstantBuffer();
 	void InitializeStructureBuffer();
 
-	void UpdatePerFrameCB(const IScene& currentScene,uint32_t currentFrame);
-	void UpdateInstanceSB(const IScene& currentScene,uint32_t currentFrame);
+	void UpdatePerFrameCB(const SceneRenderData& data, uint32_t currentFrame);
+	void UpdateInstanceSB(const SceneRenderData& data, uint32_t currentFrame);
 };

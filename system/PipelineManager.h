@@ -5,19 +5,13 @@
 #include <DirectXMath.h>
 #include <array>
 
-#include "CommonUtils.h"
+#include "system/CommonUtils.h"
+#include "system/PsoType.h"
 
 //test
 #include "MeshData.h"
 
 using Microsoft::WRL::ComPtr;
-
-enum class PsoType: size_t {
-	TextureLoader,
-	TextLoader,
-	MeshDebug,
-	Count
-};
 
 class PipelineManager {
 public:

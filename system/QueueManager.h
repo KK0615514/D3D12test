@@ -31,12 +31,7 @@ struct CommandQueueContext
 	uint64_t                            currentFenceValue = 1;				// for CPU
 	HANDLE                              fenceEvent = nullptr;
 
-	~CommandQueueContext() {
-		if (fenceEvent) {
-			CloseHandle(fenceEvent);
-			fenceEvent = nullptr;
-		}
-	}
+	~CommandQueueContext();
 };
 
 class QueueManager {

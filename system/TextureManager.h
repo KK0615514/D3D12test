@@ -4,11 +4,9 @@
 #include <wrl/client.h> // 使用 ComPtr 來自動管理 D3D12 指針釋放
 #include <vector>
 
-using Microsoft::WRL::ComPtr;
+#include "system/RenderHandle.h"
 
-struct TextureHandle {
-	uint32_t id; // 或者叫 descriptorIndex [1]
-};
+using Microsoft::WRL::ComPtr;
 
 //名字對齊 resource meshGpuResource
 struct TextureData{	

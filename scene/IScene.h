@@ -29,14 +29,11 @@ struct Speed {
     float z;
 };
 
-class IScene {
-public:
-    //之後改成填單子
-    std::vector<InstanceData> InstanceDatas;
-    uint32_t instanceCounts;
+struct SceneRenderData;
 
+class IScene {
 public:
     virtual ~IScene() = default;
     virtual void Update() = 0;
-
+    virtual const SceneRenderData& GetRenderData() const = 0;
 };

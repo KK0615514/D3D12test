@@ -1,14 +1,14 @@
 #pragma once
 
-#include "D3D12Engine.h"
-#include "QueueManager.h"
-#include "ResourceManager.h"
-#include "PipelineManager.h"
+#include "system/D3D12Engine.h"
+#include "system/QueueManager.h"
+#include "system/ResourceManager.h"
+#include "system/PipelineManager.h"
+
+#include "system/CommonUtils.h"
 
 //修改???
-#include "TextureManager.h"
-
-#include "CommonUtils.h"
+#include "system/TextureManager.h"
 
 //test
 #include <optional>
@@ -27,12 +27,9 @@ public:
 	RenderSystem operator=(const RenderSystem&) = delete;
 	RenderSystem operator=(RenderSystem&&) = delete;
 
-	//後面改成傳值 可能刪除
-	uint32_t InstanceCounts{ 0 };
-
 	void Init(HWND hwnd);
-	void Render();
-	void Update(IScene& currentScene);
+	void Update(const SceneRenderData& data);
+	void Render(const SceneRenderData& data);
 	void Shutdown();
 
 	static RenderSystem& GetInstance() {
@@ -65,10 +62,10 @@ private:
 	 void ClearBackBuffer(uint32_t currentFrame);
 	 void BindGlobalRenderResource(uint32_t currentFrame);
 	 void SetViewAndScissor();
-	 void DrawTexturePass();
+	 void DrawTexturePass(const SceneRenderData& data);
 
 	 //test
-	 void DrawMeshPass();
+	 void DrawMeshPass(const SceneRenderData& data);
 	 void TransitionBackBuffer(uint32_t currentFrame);
 
 	 RenderSystem() = default;

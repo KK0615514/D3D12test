@@ -54,12 +54,10 @@ int main(int argc, char* argv[]) {
         Timer::GetInstance().StartFrame();
 
         currentScene->Update();
+        const auto& data = currentScene->GetRenderData();
 
-        std::cout << currentScene->InstanceDatas.size() << std::endl;
-        std::cout << Timer::GetInstance().GetFPS() << std::endl;
-
-        RenderSystem::GetInstance().Update(*currentScene);
-        RenderSystem::GetInstance().Render();
+        RenderSystem::GetInstance().Update(data);
+        RenderSystem::GetInstance().Render(data);
 
         InputManager::EndFrame();                       //紀錄上一幀的按鍵
         Timer::GetInstance().EndFrame();

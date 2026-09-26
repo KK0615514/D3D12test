@@ -1,15 +1,16 @@
 #include "ResourceManager.h"
 
-#include "GlbLoader.h"
+#include "system/RenderData.h"
+#include "system/GlbLoader.h"
 
 void ResourceManager::Init() {
     InitializeConstantBuffer();
     InitializeStructureBuffer();
 }
 
-void ResourceManager::Update(const IScene& currentScene, uint32_t currentFrame) {
-    UpdatePerFrameCB(currentScene, currentFrame);
-    UpdateInstanceSB(currentScene, currentFrame);
+void ResourceManager::Update(const SceneRenderData& data, uint32_t currentFrame) {
+    UpdatePerFrameCB(data, currentFrame);
+    UpdateInstanceSB(data, currentFrame);
 }
 
 
@@ -416,7 +417,8 @@ void ResourceManager::InitializeStructureBuffer() {
     }
 }
 
-void ResourceManager::UpdatePerFrameCB(const IScene& currentScene,uint32_t currentFrame){
+// 改成活的相機
+void ResourceManager::UpdatePerFrameCB(const SceneRenderData& data, uint32_t currentFrame){
     const float width = Common::InitialWindowWidth;
     const float height = Common::InitialWindowHeight;
 
@@ -442,10 +444,9 @@ void ResourceManager::UpdatePerFrameCB(const IScene& currentScene,uint32_t curre
     memcpy(m_cbvCpuAdress[currentFrame][0], &cbData, sizeof(cbData));
 }
 
-//之後改成看單子
-void ResourceManager::UpdateInstanceSB(const IScene& currentScene,uint32_t currentFrame){
+void ResourceManager::UpdateInstanceSB(const SceneRenderData& data, uint32_t currentFrame){
     memcpy(m_structureBufferCpuAddress[currentFrame],
-        currentScene.InstanceDatas.data(),
-        currentScene.InstanceDatas.size() * sizeof(InstanceData)
+        data.instanceDatas.data(),
+        data.instanceDatas.size() * sizeof(InstanceData)
     );
 }

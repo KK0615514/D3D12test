@@ -8,10 +8,13 @@ Game3DScene::Game3DScene() {
 }
 
 void Game3DScene::Update() {
-    InstanceDatas.clear();
+    m_renderData.instanceDatas.clear();
+    m_renderData.batches.clear();
+
     float r = Xoshiro128::Random() -0.5f;
     r *= 0.1f;
-    for (int i = 0;i <= 30;i++)
+    //亂寫生怪
+    for (int i = 1;i <= 30;i++)
     {
         entt::entity monkey = m_registry.create();
         m_registry.emplace<Transform>(monkey, Transform{
@@ -19,6 +22,8 @@ void Game3DScene::Update() {
         });
         m_registry.emplace<Speed>(monkey,r, r, r);
     }
+
+    //資料寫進 m_renderData.instancedata 
     auto view = m_registry.view<Transform, Speed>();
     for (auto&& [entity, transform, speed] : view.each()) {
         auto& transform = view.get<Transform>(entity);
@@ -61,11 +66,16 @@ void Game3DScene::Update() {
         enemyInstance.Padding[1] = 0;
         enemyInstance.Padding[2] = 0;
 
-        InstanceDatas.emplace_back(enemyInstance);
+        m_renderData.instanceDatas.emplace_back(enemyInstance);
     }
     //moveSystem();
 
-    instanceCounts = InstanceDatas.size();
+    m_renderData.batches.push_back(RenderBatch{
+        .pso = PsoType::MeshDebug,
+        .mesh = MeshHandle{1}, // 暫時值，之後換成載入取得的 handle
+        .instanceOffset = 0,
+        .instanceCount = static_cast<uint32_t>(m_renderData.instanceDatas.size())
+    });
 }
 
 
@@ -77,4 +87,8 @@ void Game3DScene::moveSystem() {
         transform.position.y += speed.y;
         transform.position.z += speed.z;
     }
+}
+
+const SceneRenderData& Game3DScene::GetRenderData() const {
+    return m_renderData;
 }
