@@ -5,19 +5,22 @@ Game3DScene::Game3DScene() {
     m_registry.emplace<Transform>(m_camera);
     m_registry.emplace<Camera>(m_camera);
 
-	entt::entity monkey = m_registry.create();
-    m_registry.emplace<Transform>(monkey);
-
-	instanceCounts = 1;
 }
 
 void Game3DScene::Update() {
     InstanceDatas.clear();
-
-	InstanceData GpuData{};
-    auto view = m_registry.view<Transform>();
-    if (!view.empty()) {
-        auto entity = view.front(); // 這就會抓到當初那隻猴子的實體 ID
+    float r = Xoshiro128::Random() -0.5f;
+    r *= 0.1f;
+    for (int i = 0;i <= 30;i++)
+    {
+        entt::entity monkey = m_registry.create();
+        m_registry.emplace<Transform>(monkey, Transform{
+            .position = {r*200.0f,r*200.0f,r * 200.0f}
+        });
+        m_registry.emplace<Speed>(monkey,r, r, r);
+    }
+    auto view = m_registry.view<Transform, Speed>();
+    for (auto&& [entity, transform, speed] : view.each()) {
         auto& transform = view.get<Transform>(entity);
 
         // --- 以下完全繼承您原本的 DirectX 運算邏輯 ---
@@ -60,6 +63,18 @@ void Game3DScene::Update() {
 
         InstanceDatas.emplace_back(enemyInstance);
     }
+    //moveSystem();
 
+    instanceCounts = InstanceDatas.size();
 }
 
+
+
+void Game3DScene::moveSystem() {
+    auto view = m_registry.view<Transform,Speed>();
+    for (auto&& [entity,transform,speed] : view.each()) {
+        transform.position.x += speed.x;
+        transform.position.y += speed.y;
+        transform.position.z += speed.z;
+    }
+}

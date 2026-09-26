@@ -41,33 +41,30 @@ void RenderSystem::InitializeViewPortAndScissorRect() {
 // 很醜 要大修 現在不只texture 還有 mesh
 void RenderSystem::LoadTexture() {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
-    ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
+    ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
+    ID3D12GraphicsCommandList1* copyList = m_queueManager->GetList(QueueType::Copy);
 
-    m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
+    m_queueManager->BeginCommandRecording(QueueType::Copy, currentFrame);
 
     //texture
-    m_textureManager->LoadTexture("asset/texture/poop.png", cmdList);
-    m_textureManager->LoadTexture("asset/texture/waterball.png", cmdList);
-    m_textureManager->LoadTexture("asset/texture/Suck.jpg", cmdList);
+    //m_textureManager->LoadTexture("asset/texture/poop.png", copyList);
+    //m_textureManager->LoadTexture("asset/texture/waterball.png", copyList);
+    //m_textureManager->LoadTexture("asset/texture/Suck.jpg", copyList);
 
     //mesh test
-    m_textureMesh = m_resourceManager->Load2DMesh(cmdList);
-    m_testMesh = m_resourceManager->LoadMesh("asset/model/test.glb", cmdList);
+    m_textureMesh = m_resourceManager->Load2DMesh(copyList);
+    m_testMesh = m_resourceManager->LoadMesh("asset/model/test.glb", copyList);
 
+    m_queueManager->EndAndExecuteCommandRecording(QueueType::Copy, currentFrame);
+    uint64_t waitForCopy = m_queueManager->Signal(QueueType::Copy);
+    //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    m_queueManager->QueueWait(QueueType::Direct, QueueType::Copy, waitForCopy);
+    m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
+    m_resourceManager->TransitionMeshBuffer(m_textureMesh.value(), directList);
+    m_resourceManager->TransitionMeshBuffer(m_testMesh.value(), directList);
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
 
-
     m_queueManager->FlushCommandQueue(QueueType::Direct);
-    //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-    //std::vector<MeshGpuResource> uploadMesh;
-    //uploadMesh.emplace_back(m_resourceManager->GetMesh(*m_textureMesh));
-    //uploadMesh.emplace_back(m_resourceManager->GetMesh(*m_testMesh));
-
-    //m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
-    //m_resourceManager->TransitionMeshBuffer(uploadMesh, m_queueManager->GetList(QueueType::Direct));
-    //m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
-    //m_queueManager->FlushCommandQueue(QueueType::Direct);
-    //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
     m_textureManager->ClearUploadBuffer();
     m_resourceManager->ClearUploadBuffer();
@@ -77,7 +74,7 @@ void RenderSystem::LoadTexture() {
 void RenderSystem::Render() {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
 
-    //一幀的開始
+    //一幀的開始 啟用direct queue
     m_queueManager->WaitFrameReady(QueueType::Direct, currentFrame);
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
 
@@ -86,7 +83,7 @@ void RenderSystem::Render() {
     
     ClearBackBuffer(currentFrame);
     //目前無2D物件
-    DrawTexturePass();
+    //DrawTexturePass();
     //test
     DrawMeshPass();
     TransitionBackBuffer(currentFrame);
@@ -184,7 +181,7 @@ void RenderSystem::DrawMeshPass() {
     cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     cmdList->IASetVertexBuffers(0, 1, &mesh.vertexBufferView);
     cmdList->IASetIndexBuffer(&mesh.indexBufferView);
-    cmdList->DrawIndexedInstanced(mesh.indexCount, 1, 0, 0, 0);
+    cmdList->DrawIndexedInstanced(mesh.indexCount, InstanceCounts, 0, 0, 0);
 }
 
 // Render流程 - 5 切換Barrier到呈現狀態

@@ -114,6 +114,6 @@ void PipelineManager::InitMeshPSO() {
 	);
 }
 
-ID3D12PipelineState* PipelineManager::GetPso(PsoType type){
-	return m_psos[static_cast<size_t>(type)].Get();
+ID3D12PipelineState* PipelineManager::GetPso(PsoType type) const {
+	return m_psos.at(static_cast<size_t>(type)).Get();
 }

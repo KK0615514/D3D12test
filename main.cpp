@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
     }
 
     // 核心物件設定
-    Timer::GetInstance().SetTargetFPS(144);
+    Timer::GetInstance().SetTargetFPS(60);
     RenderSystem::GetInstance().Init(hwnd);
 
     // 顯示視窗
@@ -54,6 +54,9 @@ int main(int argc, char* argv[]) {
         Timer::GetInstance().StartFrame();
 
         currentScene->Update();
+
+        std::cout << currentScene->InstanceDatas.size() << std::endl;
+        std::cout << Timer::GetInstance().GetFPS() << std::endl;
 
         RenderSystem::GetInstance().Update(*currentScene);
         RenderSystem::GetInstance().Render();

@@ -26,13 +26,14 @@ public:
 		: m_device(device) , m_rootSignature(rootSignature){};
 
 	void Init();
-	ID3D12PipelineState* GetPso(PsoType type);
+	ID3D12PipelineState* GetPso(PsoType type) const;
 
 private:
 	ComPtr<ID3D12Device4>															m_device;
 	ComPtr<ID3D12RootSignature>														m_rootSignature;
 
-	std::array<ComPtr<ID3D12PipelineState> , static_cast<size_t>(PsoType::Count)>	m_psos;
+	static constexpr size_t PsoCount = static_cast<size_t>(PsoType::Count);
+	std::array<ComPtr<ID3D12PipelineState> , PsoCount>	m_psos;
 
 	void InitializePSO();
 	void InitMeshPSO();		//test

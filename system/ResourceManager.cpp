@@ -306,24 +306,25 @@ MeshHandle ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommandList
     return handle;
 }
 
-void ResourceManager::TransitionMeshBuffer(std::vector<MeshGpuResource>meshes, ID3D12GraphicsCommandList1* m_commandList) {
-    for (auto& mesh : meshes) {
-        D3D12_RESOURCE_BARRIER barriers[2]{};
+void ResourceManager::TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* m_commandList) {
+    MeshGpuResource mesh = GetMesh(handle);
 
-        barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barriers[0].Transition.pResource = mesh.vertexBuffer.Get();
-        barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
-        barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    D3D12_RESOURCE_BARRIER barriers[2]{};
 
-        barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barriers[1].Transition.pResource = mesh.indexBuffer.Get();
-        barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
-        barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[0].Transition.pResource = mesh.vertexBuffer.Get();
+    barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER;
+    barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 
-        m_commandList->ResourceBarrier(2, barriers);
-    }
+    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[1].Transition.pResource = mesh.indexBuffer.Get();
+    barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
+    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_INDEX_BUFFER;
+    barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+
+    m_commandList->ResourceBarrier(2, barriers);
+
 }
 
 void ResourceManager::ClearUploadBuffer() {

@@ -40,15 +40,18 @@ class ResourceManager {
 //改成placedbuffer後清理下面的public
 public:
 	static constexpr uint32_t FrameCount = Common::BackBufferCount;
+
+	//cb sb之後改place再說 現在先這樣
 	//constant buffer 
 	static const uint32_t				MaxCBVsPerFrame = 3;						//每個Frame最多幾個cbv
 	ComPtr<ID3D12Resource>				m_constantBuffer[FrameCount][MaxCBVsPerFrame];
 	void* m_cbvCpuAdress[FrameCount][MaxCBVsPerFrame] = { nullptr };
 
 	//sturcture buffer
-	const size_t						MAX_ELEMENTS = 10000;      // 物件上限
+	const size_t						MAX_ELEMENTS = 50000;      // 物件上限
 	ComPtr<ID3D12Resource>				m_structureBuffer[FrameCount];
 	InstanceData* m_structureBufferCpuAddress[FrameCount] = { nullptr };
+
 public:
 	ResourceManager(ID3D12Device4* device) :m_device(device) {};
 	~ResourceManager() = default;
@@ -58,7 +61,7 @@ public:
 
 	MeshHandle Load2DMesh(ID3D12GraphicsCommandList1* m_commandList);		//載入2D用的 VB*4 IB*6 
 	MeshHandle LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList);
-	void TransitionMeshBuffer(std::vector<MeshGpuResource>meshes, ID3D12GraphicsCommandList1* m_commandList);
+	void TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* m_commandList);
 	void ClearUploadBuffer();
 
 	const MeshGpuResource& GetMesh(MeshHandle handle) const;

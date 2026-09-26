@@ -176,26 +176,26 @@ void D3D12Engine::UpdateSwapChainBackBufferIndex() {
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 }
 
-ID3D12Device4* D3D12Engine::GetDevice() {
+ID3D12Device4* D3D12Engine::GetDevice() const{
     return m_device.Get();
 }
 
-ID3D12RootSignature* D3D12Engine::GetRootsig() {
+ID3D12RootSignature* D3D12Engine::GetRootsig() const{
     return m_rootSignature.Get();
 }
 
-ID3D12Resource* D3D12Engine::GetBackBuffer() {
+ID3D12Resource* D3D12Engine::GetBackBuffer() const{
     return m_renderTargets[m_frameIndex].Get();
 }
 
-ID3D12DescriptorHeap* D3D12Engine::GetRtvHeap() {
+ID3D12DescriptorHeap* D3D12Engine::GetRtvHeap() const{
     return m_rtvHeap.Get();
 }
 
-uint32_t D3D12Engine::GetRtvDescriptorSize() {
+uint32_t D3D12Engine::GetRtvDescriptorSize() const{
     return m_rtvDescriptorSize;
 }
 
-uint32_t D3D12Engine::GetFrameIndex() {
+uint32_t D3D12Engine::GetFrameIndex() const{
     return m_frameIndex;
 }

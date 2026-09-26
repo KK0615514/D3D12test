@@ -3,6 +3,7 @@
 
 #include "IScene.h"
 #include "system/CommonUtils.h"
+#include "system/Random.h"
 
 //後續拆掉IScene
 class Game3DScene:public IScene {
@@ -12,10 +13,11 @@ public:
 
 	void Update() override;
 
-
 private:
 	entt::registry m_registry;
 
 	entt::entity m_camera;
 	entt::entity m_player;
+
+	void moveSystem();
 };

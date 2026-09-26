@@ -21,12 +21,12 @@ public:
 
 	void UpdateSwapChainBackBufferIndex();
 
-	ID3D12Device4*			GetDevice();
-	ID3D12RootSignature*	GetRootsig();
-	ID3D12Resource*			GetBackBuffer();
-	ID3D12DescriptorHeap*	GetRtvHeap();
-	uint32_t				GetRtvDescriptorSize();
-	uint32_t				GetFrameIndex();
+	ID3D12Device4*			GetDevice() const;
+	ID3D12RootSignature*	GetRootsig() const;
+	ID3D12Resource*			GetBackBuffer() const;
+	ID3D12DescriptorHeap*	GetRtvHeap() const;
+	uint32_t				GetRtvDescriptorSize() const;
+	uint32_t				GetFrameIndex() const;
 
 private:
 	static constexpr uint32_t FrameCount = Common::BackBufferCount;

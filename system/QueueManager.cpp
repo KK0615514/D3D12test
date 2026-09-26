@@ -6,8 +6,6 @@ void QueueManager::Init() {
 }
 
 void QueueManager::InitializeCommandQueue() {
-    m_commandQueues.resize(3);
-
     // 建立DirectQueue
     D3D12_COMMAND_QUEUE_DESC directQueueDesc{};
     directQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
@@ -21,7 +19,8 @@ void QueueManager::InitializeCommandQueue() {
         "Fence for DirectQueue建立失敗"
     );
     m_commandQueues[0].fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-
+    if (!m_commandQueues[0].fenceEvent) throw std::runtime_error("Fence event建立失敗");
+    
     // 建立CopyQueue
     D3D12_COMMAND_QUEUE_DESC copyQueueDesc{};
     copyQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
@@ -35,11 +34,12 @@ void QueueManager::InitializeCommandQueue() {
         "Fence for CopyQueue建立失敗"
     );
     m_commandQueues[1].fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!m_commandQueues[1].fenceEvent) throw std::runtime_error("Fence event建立失敗");
 
     // 建立ComputeQueue
     D3D12_COMMAND_QUEUE_DESC computeQueueDesc{};
     computeQueueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-    computeQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+    computeQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
     Common::ThrowIfFailed(
         m_device->CreateCommandQueue(&computeQueueDesc, IID_PPV_ARGS(&m_commandQueues[2].commandQueue)),
         "ComputeQueue建立失敗"
@@ -49,6 +49,7 @@ void QueueManager::InitializeCommandQueue() {
         "Fence for ComputeQueue建立失敗"
     );
     m_commandQueues[2].fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!m_commandQueues[2].fenceEvent) throw std::runtime_error("Fence event建立失敗");
 }
 
 void QueueManager::InitializeCommandList() {
@@ -92,13 +93,15 @@ void QueueManager::InitializeCommandList() {
     );
 }
 
+
+
 void QueueManager::BeginCommandRecording(QueueType queue, uint32_t currentFrame) {
     CommandQueueContext& currentQueue = m_commandQueues[static_cast<size_t>(queue)];
 
     Common::ThrowIfFailed(
         currentQueue.commandAllocators[currentFrame]->Reset(),
         "Allocator重置失敗"
-    );
+    );  
     Common::ThrowIfFailed(
         currentQueue.commandList->Reset(currentQueue.commandAllocators[currentFrame].Get(), nullptr),
         "CommandList綁定失敗"
@@ -108,7 +111,10 @@ void QueueManager::BeginCommandRecording(QueueType queue, uint32_t currentFrame)
 void QueueManager::EndAndExecuteCommandRecording(QueueType queue, uint32_t currentFrame) {
     CommandQueueContext& currentQueue = m_commandQueues[static_cast<size_t>(queue)];
 
-    currentQueue.commandList->Close();
+    Common::ThrowIfFailed(
+        currentQueue.commandList->Close(),
+        "CommandList close 失敗"
+    );
     ID3D12CommandList* cmds[] = { currentQueue.commandList.Get() };
     currentQueue.commandQueue->ExecuteCommandLists(1, cmds);
 }
@@ -121,7 +127,10 @@ void QueueManager::WaitFrameReady(QueueType queue, uint32_t currentFrame) {
     // 如果 GPU 目前實際完成的進度，還沒趕上這個目標值，CPU 才進入等待
     if (currentQueue.fence->GetCompletedValue() < fenceToWait)
     {
-        currentQueue.fence->SetEventOnCompletion(fenceToWait, currentQueue.fenceEvent);
+        Common::ThrowIfFailed(
+            currentQueue.fence->SetEventOnCompletion(fenceToWait, currentQueue.fenceEvent),
+            "SetEventOnCompletion 失敗"
+        );
         WaitForSingleObject(currentQueue.fenceEvent, INFINITE);
     }
 }
@@ -156,10 +165,35 @@ void QueueManager::FlushCommandQueue(QueueType queue) {
     }
 }
     
-ID3D12CommandQueue* QueueManager::GetQueue(QueueType queue) {
-    return m_commandQueues[static_cast<size_t>(queue)].commandQueue.Get();
+
+// 指定的queue送出signal 完成後fence改變為value
+uint64_t QueueManager::Signal(QueueType queue){
+    auto& context = m_commandQueues.at(static_cast<size_t>(queue));
+    const uint64_t value = context.currentFenceValue++;
+
+    Common::ThrowIfFailed(
+        context.commandQueue->Signal(context.fence.Get(), value),
+        "Queue signal 失敗"
+    );
+    return value;
+}
+// 接受fencvalue 第一個queue等待第二個queue的fence的值到fencevalue
+void QueueManager::QueueWait( QueueType waitingQueue,QueueType sourceQueue,uint64_t fenceValue){
+    auto& waiting = m_commandQueues.at(static_cast<size_t>(waitingQueue));
+    auto& source = m_commandQueues.at(static_cast<size_t>(sourceQueue));
+
+    Common::ThrowIfFailed(
+        waiting.commandQueue->Wait(source.fence.Get(), fenceValue),
+        "Queue wait 失敗"
+    );
 }
 
-ID3D12GraphicsCommandList1* QueueManager::GetList(QueueType queue) {
-    return m_commandQueues[static_cast<size_t>(queue)].commandList.Get();
+
+
+ID3D12CommandQueue* QueueManager::GetQueue(QueueType queue) const {
+    return m_commandQueues.at(static_cast<size_t>(queue)).commandQueue.Get();
 }
+
+ID3D12GraphicsCommandList1* QueueManager::GetList(QueueType queue) const {
+    return m_commandQueues.at(static_cast<size_t>(queue)).commandList.Get();
+}   
