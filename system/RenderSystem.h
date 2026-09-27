@@ -10,9 +10,6 @@
 //修改???
 #include "system/TextureManager.h"
 
-//test
-#include <optional>
-
 enum class RootSlot: UINT{
 	TextureTable = 0,
 	InstanceBuffer = 1,
@@ -32,6 +29,9 @@ public:
 	void Render(const SceneRenderData& data);
 	void Shutdown();
 
+	//test
+	std::vector<MeshHandle> LoadMeshes(const std::vector<std::string>& paths);
+
 	static RenderSystem& GetInstance() {
 		static RenderSystem instance;
 		return instance;
@@ -45,10 +45,6 @@ private:
 
 	 //後續新增resource manager
 	 std::unique_ptr<TextureManager>	m_textureManager;
-
-	 //test  之後刪除
-	 std::optional<MeshHandle> m_textureMesh;
-	 std::optional<MeshHandle> m_testMesh;
 
 	 //視窗與裁切規格	如果要小地圖等功能可多個
 	 D3D12_VIEWPORT						screenViewport{};

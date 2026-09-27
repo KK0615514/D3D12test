@@ -1,11 +1,14 @@
 #pragma once
 #include <d3d12.h>
 #include <dxgi1_6.h>
-#include <wrl/client.h> // 使用 ComPtr 來自動管理 D3D12 指針釋放
+#include <wrl/client.h>			// 使用 ComPtr 來自動管理 D3D12 指針釋放
 #include <DirectXMath.h>
+	
+#include <string>				// 實作asset path cache
+#include <unordered_map>		// 實作asset path cache
 
-#include "CommonUtils.h"
-#include "MeshData.h"
+#include "system/CommonUtils.h"
+#include "system/MeshData.h"
 
 #include "system/RenderHandle.h"
 
@@ -27,6 +30,12 @@ struct MeshGpuResource {
 
 	uint32_t indexCount = 0;
 	uint32_t vertexCount = 0;
+};
+
+// 檢查物件是否是新載入的
+struct MeshLoadResult {
+	MeshHandle handle;
+	bool newlyCreated;
 };
 
 // 向前宣告 渲染單子 
@@ -58,7 +67,7 @@ public:
 	void Update(const SceneRenderData& data, uint32_t currentFrame);
 
 	MeshHandle Load2DMesh(ID3D12GraphicsCommandList1* m_commandList);		//載入2D用的 VB*4 IB*6 
-	MeshHandle LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList);
+	MeshLoadResult LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList);
 	void TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* m_commandList);
 	void ClearUploadBuffer();
 
@@ -67,6 +76,7 @@ public:
 private:
 	ComPtr<ID3D12Device4>			m_device;
 	std::vector<MeshGpuResource>	m_meshes;
+	std::unordered_map<std::string, MeshHandle> m_meshCache;
 
 	void InitializeConstantBuffer();
 	void InitializeStructureBuffer();

@@ -36,6 +36,14 @@ int main(int argc, char* argv[]) {
 
     //初始Scene設定 
     std::unique_ptr<IScene> currentScene = std::make_unique<Game3DScene>();
+    
+    //test
+    std::vector<std::string> test;
+    test.emplace_back("asset/model/test.glb");
+
+    currentScene->SetMeshes(
+        RenderSystem::GetInstance().LoadMeshes(test)
+    );
 
     // ─── 主迴圈 ───
     MSG msg = {};

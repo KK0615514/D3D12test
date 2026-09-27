@@ -1,10 +1,11 @@
 #include "Game3DScene.h"
 
 Game3DScene::Game3DScene() {
+
+
     m_camera = m_registry.create();
     m_registry.emplace<Transform>(m_camera);
     m_registry.emplace<Camera>(m_camera);
-
 }
 
 void Game3DScene::Update() {
@@ -72,7 +73,7 @@ void Game3DScene::Update() {
 
     m_renderData.batches.push_back(RenderBatch{
         .pso = PsoType::MeshDebug,
-        .mesh = MeshHandle{1}, // 暫時值，之後換成載入取得的 handle
+        .mesh = m_meshes.at(0), // 暫時值，之後換成載入取得的 handle
         .instanceOffset = 0,
         .instanceCount = static_cast<uint32_t>(m_renderData.instanceDatas.size())
     });
@@ -87,6 +88,10 @@ void Game3DScene::moveSystem() {
         transform.position.y += speed.y;
         transform.position.z += speed.z;
     }
+}
+
+void Game3DScene::SetMeshes(std::vector<MeshHandle> meshes){
+    m_meshes = std::move(meshes); 
 }
 
 const SceneRenderData& Game3DScene::GetRenderData() const {

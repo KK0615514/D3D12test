@@ -23,7 +23,7 @@ void RenderSystem::Init(HWND hwnd) {
     m_pipelineManager->Init();
 
     InitializeViewPortAndScissorRect();
-    LoadTexture();
+    //LoadTexture();
 }
 
 void RenderSystem::InitializeViewPortAndScissorRect() {
@@ -54,22 +54,57 @@ void RenderSystem::LoadTexture() {
     //m_textureManager->LoadTexture("asset/texture/Suck.jpg", copyList);
 
     //mesh test
-    m_textureMesh = m_resourceManager->Load2DMesh(copyList);
-    m_testMesh = m_resourceManager->LoadMesh("asset/model/test.glb", copyList);
+    m_resourceManager->Load2DMesh(copyList);
+    const auto result = m_resourceManager->LoadMesh("asset/model/test.glb", copyList);
 
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Copy, currentFrame);
     uint64_t waitForCopy = m_queueManager->Signal(QueueType::Copy);
     //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
     m_queueManager->QueueWait(QueueType::Direct, QueueType::Copy, waitForCopy);
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
-    m_resourceManager->TransitionMeshBuffer(m_textureMesh.value(), directList);
-    m_resourceManager->TransitionMeshBuffer(m_testMesh.value(), directList);
+
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
 
     m_queueManager->FlushCommandQueue(QueueType::Direct);
 
     m_textureManager->ClearUploadBuffer();
     m_resourceManager->ClearUploadBuffer();
+}
+
+// test 看情況取代上面 
+// 上面目前沒用
+std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>& paths) {
+    uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
+    ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
+    ID3D12GraphicsCommandList1* copyList = m_queueManager->GetList(QueueType::Copy);
+    std::vector<MeshLoadResult> results;
+
+    m_queueManager->BeginCommandRecording(QueueType::Copy, currentFrame);
+    for (auto path : paths) {
+        results.emplace_back(m_resourceManager->LoadMesh(path.c_str(), copyList));
+    }
+    m_queueManager->EndAndExecuteCommandRecording(QueueType::Copy, currentFrame);
+    uint64_t waitForCopy = m_queueManager->Signal(QueueType::Copy);
+    //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    m_queueManager->QueueWait(QueueType::Direct, QueueType::Copy, waitForCopy);
+    m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
+    for (const auto& result : results) {
+        if (result.newlyCreated)
+            m_resourceManager->TransitionMeshBuffer(result.handle, directList);
+    }
+    m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
+
+    m_queueManager->FlushCommandQueue(QueueType::Direct);
+
+    m_textureManager->ClearUploadBuffer();
+    m_resourceManager->ClearUploadBuffer();
+
+    std::vector<MeshHandle> handles;
+    handles.reserve(results.size());
+    for (const auto& result : results) {
+        handles.push_back(result.handle);
+    }
+    return handles;
 }
 
 // 現在每幀fence等待是在這裡 之後要修改 不然太醜
@@ -167,8 +202,8 @@ void RenderSystem::ClearBackBuffer(uint32_t currentFrame) {
 
 // Render流程 - 4 Pass            有待修改 現在count 是亂填的 等到handle做完 才能完整
 void RenderSystem::DrawTexturePass(const SceneRenderData& data){
-    if (!m_textureMesh) return;
-    const auto& mesh = m_resourceManager->GetMesh(*m_textureMesh);
+    MeshHandle texture{ 0 };
+    const auto& mesh = m_resourceManager->GetMesh(texture);
     ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
 
     //綁定PSO
@@ -183,17 +218,13 @@ void RenderSystem::DrawTexturePass(const SceneRenderData& data){
 
 // Render流程 - 4 test Pass       有待修改 現在count 是亂填的 等到handle做完 才能完整
 void RenderSystem::DrawMeshPass(const SceneRenderData& data) {
-
-    //刪除
-    if (!m_testMesh) return;
-
     ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
     cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     for (const auto& batch : data.batches) {
         //改
-        const auto& mesh = m_resourceManager->GetMesh(*m_testMesh);
-        cmdList->SetPipelineState(m_pipelineManager->GetPso(PsoType::MeshDebug));
+        const auto& mesh = m_resourceManager->GetMesh(batch.mesh);
+        cmdList->SetPipelineState(m_pipelineManager->GetPso(batch.pso));
 
         cmdList->IASetVertexBuffers(0, 1, &mesh.vertexBufferView);
         cmdList->IASetIndexBuffer(&mesh.indexBufferView);

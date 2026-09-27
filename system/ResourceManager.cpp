@@ -16,6 +16,7 @@ void ResourceManager::Update(const SceneRenderData& data, uint32_t currentFrame)
 
 
 MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList) {
+
     MeshGpuResource gpuMesh{};
     gpuMesh.vertexCount = static_cast<uint32_t>(4);
     gpuMesh.indexCount = static_cast<uint32_t>(6);
@@ -161,7 +162,14 @@ MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList
     return handle;
 }
 
-MeshHandle ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList) {
+MeshLoadResult ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList) {
+    const std::string key = path;
+    const auto cachedHandle = m_meshCache.find(key);
+
+    if (cachedHandle != m_meshCache.end()) {
+        return MeshLoadResult{ cachedHandle->second,false };
+    }
+
     MeshData meshData = LoadGlbMeshData(path);
 
     if (meshData.vertices.empty() || meshData.indices.empty()) {
@@ -304,7 +312,9 @@ MeshHandle ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommandList
     };
 
     m_meshes.push_back(std::move(gpuMesh));
-    return handle;
+    m_meshCache.emplace(key, handle);
+
+    return MeshLoadResult{handle,true};
 }
 
 void ResourceManager::TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* m_commandList) {
