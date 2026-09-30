@@ -1,8 +1,9 @@
 #include "Window.h"
 
-
 //視窗事件回呼函式 (Window Procedure)
 LRESULT CALLBACK WindowProc(HWND hWnd, uint32_t message, WPARAM wParam, LPARAM lParam) {
+    InputManager* m_input = reinterpret_cast<InputManager*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+
     switch (message) {
     case WM_DESTROY:            //右上關閉
         PostQuitMessage(0);
@@ -11,35 +12,50 @@ LRESULT CALLBACK WindowProc(HWND hWnd, uint32_t message, WPARAM wParam, LPARAM l
         return 0;
 
     case WM_KEYDOWN:            //鍵盤按下啟動 鬆開關閉
-        InputManager::SetKeyState(wParam,true);
+        if (m_input){
+            m_input->SetKeyState(wParam, true);
+        }
         return 0;
+
     case WM_KEYUP:
-        InputManager::SetKeyState(wParam, false);
+        if (m_input) {
+            m_input->SetKeyState(wParam, false);
+        }
         return 0;
 
     case WM_MOUSEMOVE:
-    {
-        int x = GET_X_LPARAM(lParam);
-        int y = GET_Y_LPARAM(lParam);
-        InputManager::SetMousePos(x,y);
+        if (m_input) {
+            int x = GET_X_LPARAM(lParam);
+            int y = GET_Y_LPARAM(lParam);
+            m_input->SetMousePos(x, y);
+        }
         return 0;
-    }
+
     case WM_LBUTTONDOWN:        //滑鼠按下啟動 鬆開關閉
-        InputManager::SetKeyState(VK_LBUTTON, true);
+        if (m_input) {
+            m_input->SetKeyState(VK_LBUTTON, true);
+        }
         return 0;
+
     case WM_LBUTTONUP:
-        InputManager::SetKeyState(VK_LBUTTON, false);
+        if (m_input) {
+            m_input->SetKeyState(VK_LBUTTON, false);
+        }
         return 0;
-    case WM_RBUTTONDOWN:        
-        InputManager::SetKeyState(VK_RBUTTON, true);
+
+    case WM_RBUTTONDOWN: 
+        if (m_input) {
+            m_input->SetKeyState(VK_RBUTTON, true);
+        }
         return 0;
+
     case WM_RBUTTONUP:
-        InputManager::SetKeyState(VK_RBUTTON, false);
+        if (m_input) {
+            m_input->SetKeyState(VK_RBUTTON, false);
+        }
         return 0;
+
     }
-
-
-
     return DefWindowProc(hWnd, message, wParam, lParam);
 }
 

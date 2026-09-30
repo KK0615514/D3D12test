@@ -19,6 +19,9 @@ enum class RootSlot: UINT{
 class RenderSystem
 {
 public:
+	RenderSystem() = default;
+	~RenderSystem() = default;
+
 	RenderSystem (const RenderSystem&) = delete;
 	RenderSystem(RenderSystem&&) = delete;
 	RenderSystem operator=(const RenderSystem&) = delete;
@@ -31,11 +34,6 @@ public:
 
 	//test
 	std::vector<MeshHandle> LoadMeshes(const std::vector<std::string>& paths);
-
-	static RenderSystem& GetInstance() {
-		static RenderSystem instance;
-		return instance;
-	};
 
 private:
 	 std::unique_ptr<D3D12Engine>			m_d3d12Engine;
@@ -63,7 +61,4 @@ private:
 	 //test
 	 void DrawMeshPass(const SceneRenderData& data);
 	 void TransitionBackBuffer(uint32_t currentFrame);
-
-	 RenderSystem() = default;
-	 ~RenderSystem() = default;
 };

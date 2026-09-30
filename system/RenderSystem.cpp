@@ -40,7 +40,8 @@ void RenderSystem::InitializeViewPortAndScissorRect() {
     scissorRect.bottom      = static_cast<uint32_t>(Common::InitialWindowHeight);
 }
 
-// 很醜 要大修 現在不只texture 還有 mesh
+// 很醜 要大修 現在不只texture 還有 mesh   
+// 後續改成回傳 texture handle
 void RenderSystem::LoadTexture() {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
     ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
@@ -77,7 +78,7 @@ std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>&
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
     ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
     ID3D12GraphicsCommandList1* copyList = m_queueManager->GetList(QueueType::Copy);
-    std::vector<MeshLoadResult> results;
+    std::vector<MeshLoadResult> results(10);    //預設容量 10
 
     m_queueManager->BeginCommandRecording(QueueType::Copy, currentFrame);
     for (auto path : paths) {

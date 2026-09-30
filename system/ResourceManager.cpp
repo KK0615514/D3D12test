@@ -427,31 +427,11 @@ void ResourceManager::InitializeStructureBuffer() {
     }
 }
 
-// 改成活的相機
-void ResourceManager::UpdatePerFrameCB(const SceneRenderData& data, uint32_t currentFrame){
-    const float width = Common::InitialWindowWidth;
-    const float height = Common::InitialWindowHeight;
-
-    const auto eye = DirectX::XMVectorSet(0.0f, 0.0f, 5.0f, 1.0f);
-    const auto target = DirectX::XMVectorZero();
-    const auto up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-
-    const auto view = DirectX::XMMatrixLookAtLH(eye, target, up);
-    const auto proj = DirectX::XMMatrixPerspectiveFovLH(
-        DirectX::XMConvertToRadians(60.0f),
-        width / height,
-        0.1f,
-        100.0f
+void ResourceManager::UpdatePerFrameCB(const SceneRenderData& data, uint32_t currentFrame) {
+    memcpy(m_cbvCpuAdress[currentFrame][0], 
+        &data.cameraData,
+        sizeof(data.cameraData)
     );
-
-    PerFrameConstant cbData;
-    DirectX::XMStoreFloat4x4(
-        &cbData.ViewProj,
-        DirectX::XMMatrixTranspose(view * proj)
-    );
-    cbData.CameraPos = { 0.0f, 0.0f, -5.0f };
-
-    memcpy(m_cbvCpuAdress[currentFrame][0], &cbData, sizeof(cbData));
 }
 
 void ResourceManager::UpdateInstanceSB(const SceneRenderData& data, uint32_t currentFrame){

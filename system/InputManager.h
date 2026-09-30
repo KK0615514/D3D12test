@@ -3,45 +3,47 @@
 
 class InputManager{
 public:
+	InputManager() = default;
+	~InputManager() = default;
+
 	InputManager(const InputManager&) = delete;
 	InputManager(InputManager&&) = delete;
 	InputManager& operator=(const InputManager&) = delete;
 	InputManager& operator=(InputManager&&) = delete;
 
-
-	static void SetKeyState(int vKey, bool state) {
+	void SetKeyState(int vKey, bool state) {
 		if (vKey >= 0 && vKey < 256) {
-			Get().currentKeys[vKey] = state;
+			currentKeys[vKey] = state;
 		}
 	}
 
-	static void SetMousePos(int x, int y){
-		Get().mouseX = x;
-		Get().mouseY = y;
+	void SetMousePos(int x, int y){
+		mouseX = x;
+		mouseY = y;
 	}
 
-	static int GetMouseX() {
-		return Get().mouseX;
+	int GetMouseX() {
+		return mouseX;
 	}
 
-	static int GetMouseY() {
-		return Get().mouseY;
+	int GetMouseY() {
+		return mouseY;
 	}
 
-	static bool IsKeyHeld(int vKey) {
-		return Get().currentKeys[vKey];
+	bool IsKeyHeld(int vKey) {
+		return currentKeys[vKey];
 	}
 
-	static bool IsKeyDown(int vKey) {
-		return Get().currentKeys[vKey] && !Get().PreviousKeys[vKey];
+	bool IsKeyDown(int vKey) {
+		return currentKeys[vKey] && !PreviousKeys[vKey];
 	}
 
-	static bool IsKeyUp(int vKey) {
-		return !Get().currentKeys[vKey] && Get().PreviousKeys[vKey];
+	bool IsKeyUp(int vKey) {
+		return !currentKeys[vKey] && PreviousKeys[vKey];
 	}
 
-	static void EndFrame() {
-		std::memcpy(Get().PreviousKeys, Get().currentKeys, sizeof(Get().currentKeys));
+	void EndFrame() {
+		std::memcpy(PreviousKeys, currentKeys, sizeof(currentKeys));
 	}
 
 private:
@@ -50,12 +52,4 @@ private:
 
 	int mouseX;
 	int mouseY;
-
-	static InputManager& Get() {
-		static InputManager instance; 
-		return instance;
-	}
-
-	InputManager() = default;
-	~InputManager() = default;
 };

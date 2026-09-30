@@ -1,27 +1,204 @@
 #include "Game3DScene.h"
 
-Game3DScene::Game3DScene() {
-
-
+Game3DScene::Game3DScene(GameContext& ctx) :IScene(ctx)
+{
     m_camera = m_registry.create();
     m_registry.emplace<Transform>(m_camera);
     m_registry.emplace<Camera>(m_camera);
+
+    m_registry.emplace<Transform>(m_player);
 }
 
 void Game3DScene::Update() {
+
+    //RotateCamera();
+    MoveSystem();
+    UpdateCamera();
+
+    SpwanAndMoveEnemy();
+
+}
+
+
+
+// test  打包相機 留下
+void Game3DScene::UpdateCamera() {
+    const float width = Common::InitialWindowWidth;
+    const float height = Common::InitialWindowHeight;
+
+    const auto& transform = m_registry.get<Transform>(m_camera);
+    const auto& camera = m_registry.get<Camera>(m_camera);
+
+    auto position = DirectX::XMLoadFloat3(&transform.position);
+    auto rotation = DirectX::XMQuaternionNormalize(DirectX::XMLoadFloat4(&transform.rotation));
+
+    //  +Z 是前 +Y 是上
+    auto forward = DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 0, 1, 0), rotation);
+    auto up = DirectX::XMVector3Rotate(DirectX::XMVectorSet(0, 1, 0, 0), rotation);
+
+    auto view = DirectX::XMMatrixLookToLH(position, forward, up);
+    auto projection = DirectX::XMMatrixPerspectiveFovLH(
+        camera.fovY,
+        width / height,
+        camera.nearZ,
+        camera.farZ
+    );
+
+    auto& output = m_renderData.cameraData;
+    DirectX::XMStoreFloat4x4(&output.ViewProj, DirectX::XMMatrixTranspose(view * projection));
+    output.CameraPos = transform.position;
+    output.padding = 0.0f;
+}
+
+// test  相機移動
+void Game3DScene::MoveSystem() {
+
+    auto delta = m_ctx.m_timer.GetDeltaTime();
+    const float speed = 12.0f;
+    auto& transform = m_registry.get<Transform>(m_camera);
+    
+    const auto rotation = DirectX::XMQuaternionNormalize(
+        DirectX::XMLoadFloat4(&transform.rotation)
+    );
+
+    const auto forward = DirectX::XMVector3Rotate(
+        DirectX::XMVectorSet(0, 0, 1, 0), rotation
+    );
+    const auto right = DirectX::XMVector3Rotate(
+        DirectX::XMVectorSet(1, 0, 0, 0), rotation
+    );
+
+    float forwardInput = 0.0f;
+    float rightInput = 0.0f;
+
+    if (m_ctx.m_input.IsKeyHeld('W') ||
+        m_ctx.m_input.IsKeyHeld(VK_LBUTTON))
+        forwardInput += 1.0f;
+
+    if (m_ctx.m_input.IsKeyHeld('S'))
+        forwardInput -= 1.0f;
+
+    if (m_ctx.m_input.IsKeyHeld('D'))
+        rightInput += 1.0f;
+
+    if (m_ctx.m_input.IsKeyHeld('A'))
+        rightInput -= 1.0f;
+
+    auto direction = DirectX::XMVectorAdd(
+        DirectX::XMVectorScale(forward, forwardInput),
+        DirectX::XMVectorScale(right, rightInput)
+    );
+
+    if (forwardInput != 0.0f || rightInput != 0.0f) {
+        // 正規化，避免 W+D 斜向移動比較快
+        direction = DirectX::XMVector3Normalize(direction);
+
+        auto position = DirectX::XMLoadFloat3(&transform.position);
+        position = DirectX::XMVectorAdd(
+            position,
+            DirectX::XMVectorScale(direction, speed * delta)
+        );
+
+        DirectX::XMStoreFloat3(&transform.position, position);
+    }
+}
+
+// test  相機旋轉
+void Game3DScene::RotateCamera() {
+    const int mouseX = m_ctx.m_input.GetMouseX();
+    const int mouseY = m_ctx.m_input.GetMouseY();
+
+    if (!m_ctx.m_input.IsKeyHeld(VK_RBUTTON)) {
+        m_cameraDragging = false;
+        return;
+    }
+
+    // 剛開始拖曳，只記錄位置，避免視角跳動
+    if (!m_cameraDragging) {
+        m_lastMouseX = mouseX;
+        m_lastMouseY = mouseY;
+        m_cameraDragging = true;
+        return;
+    }
+
+    const float deltaX = static_cast<float>(mouseX - m_lastMouseX);
+    const float deltaY = static_cast<float>(mouseY - m_lastMouseY);
+
+    m_lastMouseX = mouseX;
+    m_lastMouseY = mouseY;
+
+    // 每像素轉動 0.1 度，不需要乘 deltaTime
+    const float sensitivity = DirectX::XMConvertToRadians(0.22f);
+
+    m_cameraYaw += deltaX * sensitivity;
+    m_cameraPitch += deltaY * sensitivity;
+
+    const float pitchLimit = DirectX::XMConvertToRadians(89.0f);
+    if (m_cameraPitch > pitchLimit)
+        m_cameraPitch = pitchLimit;
+    if (m_cameraPitch < -pitchLimit)
+        m_cameraPitch = -pitchLimit;
+
+    // 避免 yaw 長時間累積成過大的數值
+    if (m_cameraYaw > DirectX::XM_PI)
+        m_cameraYaw -= DirectX::XM_2PI;
+    if (m_cameraYaw < -DirectX::XM_PI)
+        m_cameraYaw += DirectX::XM_2PI;
+
+    auto& transform = m_registry.get<Transform>(m_camera);
+    const auto rotation = DirectX::XMQuaternionRotationRollPitchYaw(
+        m_cameraPitch,
+        m_cameraYaw,
+        0.0f
+    );
+
+    DirectX::XMStoreFloat4(&transform.rotation, rotation);
+}
+
+// test 加減生怪
+void Game3DScene::SpwanAndMoveEnemy() {
     m_renderData.instanceDatas.clear();
     m_renderData.batches.clear();
-
-    float r = Xoshiro128::Random() -0.5f;
-    r *= 0.1f;
+    auto delta = m_ctx.m_timer.GetDeltaTime();
     //亂寫生怪
-    for (int i = 1;i <= 30;i++)
+    for (int i = 1;i <= 1;i++)
     {
+        float rx = Xoshiro128::Random() - 0.5f;
+        float ry = Xoshiro128::Random() - 0.5f;
+        float rz = Xoshiro128::Random() - 0.5f;
         entt::entity monkey = m_registry.create();
         m_registry.emplace<Transform>(monkey, Transform{
-            .position = {r*200.0f,r*200.0f,r * 200.0f}
-        });
-        m_registry.emplace<Speed>(monkey,r, r, r);
+            .position = {rx * 200.0f,ry * 200.0f,rz * 200.0f}
+            });
+        m_registry.emplace<Speed>(monkey,
+            Xoshiro128::RandomRange(-5.0f, 5.0f),
+            Xoshiro128::RandomRange(-5.0f, 5.0f),
+            Xoshiro128::RandomRange(-5.0f, 5.0f)
+        );
+        m_registry.emplace<Lifetime>(monkey, 10.0f);
+    }
+
+    ////亂寫移動
+    //auto moveview = m_registry.view<Transform, Speed>();
+    //for (auto&& [entity, transform, speed] : moveview.each()) {
+    //    transform = moveview.get<Transform>(entity);
+    //    speed = moveview.get<Speed>(entity);
+    //    transform.position.x += speed.x * delta;
+    //    transform.position.y += speed.y * delta;
+    //    transform.position.z += speed.z * delta;
+    //}
+
+    // 複製貼上 存活確認
+    std::vector<entt::entity> expired;
+    auto dlview = m_registry.view<Lifetime>();
+    for (auto&& [entity, lifetime] : dlview.each()) {
+        lifetime.time -= delta;
+        if (lifetime.time <= 0.0f) {
+            expired.push_back(entity);
+        }
+    }
+    for (const auto entity : expired) {
+        m_registry.destroy(entity);
     }
 
     //資料寫進 m_renderData.instancedata 
@@ -40,13 +217,16 @@ void Game3DScene::Update() {
         DirectX::XMVECTOR vOriginal = DirectX::XMLoadFloat4(&transform.rotation);
 
         // 2. 建立一個代表繞 X 軸旋轉 45 度的四元數
-        DirectX::XMVECTOR vDelta = DirectX::XMQuaternionRotationAxis(DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), DirectX::XMConvertToRadians(1.0f));
+        DirectX::XMVECTOR vDelta = DirectX::XMQuaternionRotationAxis(
+            DirectX::XMVectorSet(0.5f, 0.5f, 0.0f, 0.0f), 
+            DirectX::XMConvertToRadians(3.0f)
+        );
 
         // 3. 四元數相乘（這等於將旋轉疊加）
         DirectX::XMVECTOR vNewRotation = DirectX::XMQuaternionMultiply(vOriginal, vDelta);
 
         // 4. 將新結果存回結構體中（去掉錯誤的 & 符號）
-        DirectX::XMStoreFloat4(&transform.rotation, vNewRotation);
+        //DirectX::XMStoreFloat4(&transform.rotation, vNewRotation);
 
         // 5. 轉換為矩陣供後續繪圖使用
         DirectX::XMMATRIX mRotation = DirectX::XMMatrixRotationQuaternion(vNewRotation);
@@ -73,22 +253,13 @@ void Game3DScene::Update() {
 
     m_renderData.batches.push_back(RenderBatch{
         .pso = PsoType::MeshDebug,
-        .mesh = m_meshes.at(0), // 暫時值，之後換成載入取得的 handle
+        .mesh = m_meshes.at(0), // 暫時值，之後換成載入取得的 handle 物件名稱.second這樣
         .instanceOffset = 0,
         .instanceCount = static_cast<uint32_t>(m_renderData.instanceDatas.size())
-    });
+        });
 }
 
 
-
-void Game3DScene::moveSystem() {
-    auto view = m_registry.view<Transform,Speed>();
-    for (auto&& [entity,transform,speed] : view.each()) {
-        transform.position.x += speed.x;
-        transform.position.y += speed.y;
-        transform.position.z += speed.z;
-    }
-}
 
 void Game3DScene::SetMeshes(std::vector<MeshHandle> meshes){
     m_meshes = std::move(meshes); 

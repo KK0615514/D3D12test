@@ -27,22 +27,30 @@ int main(int argc, char* argv[]) {
     }
 
     // 核心物件設定
-    Timer::GetInstance().SetTargetFPS(60);
-    RenderSystem::GetInstance().Init(hwnd);
+    std::unique_ptr<Timer> m_timer = std::make_unique<Timer>();
+    std::unique_ptr<RenderSystem> m_renderSystem = std::make_unique<RenderSystem>();
+    std::unique_ptr<InputManager> m_input = std::make_unique<InputManager>();
+    m_timer->SetTargetFPS(144);
+    m_renderSystem->Init(hwnd);
+    SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(m_input.get()));
+    GameContext m_ctx{
+        *m_timer,
+        *m_input
+    };
 
     // 顯示視窗
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
 
     //初始Scene設定 
-    std::unique_ptr<IScene> currentScene = std::make_unique<Game3DScene>();
+    std::unique_ptr<IScene> currentScene = std::make_unique<Game3DScene>(m_ctx);
     
     //test
     std::vector<std::string> test;
     test.emplace_back("asset/model/test.glb");
 
     currentScene->SetMeshes(
-        RenderSystem::GetInstance().LoadMeshes(test)
+        m_renderSystem->LoadMeshes(test)
     );
 
     // ─── 主迴圈 ───
@@ -59,16 +67,26 @@ int main(int argc, char* argv[]) {
         }
         if (!running) break;
 
-        Timer::GetInstance().StartFrame();
+        m_timer->StartFrame();
 
         currentScene->Update();
         const auto& data = currentScene->GetRenderData();
 
-        RenderSystem::GetInstance().Update(data);
-        RenderSystem::GetInstance().Render(data);
+        //test
+        static int a = 0;
+        a++;
+        if (a >= 144)
+        {
+            std::cout << "FPS : " << m_timer->GetFPS() << std::endl;
+            std::cout << "Instance Counts : " << data.instanceDatas.size() << std::endl;
+            a = 0;
+        }
 
-        InputManager::EndFrame();                       //紀錄上一幀的按鍵
-        Timer::GetInstance().EndFrame();
+        m_renderSystem->Update(data);
+        m_renderSystem->Render(data);
+
+        m_input->EndFrame();                       //紀錄上一幀的按鍵
+        m_timer->EndFrame();
     }
     return (int)msg.wParam;
 }

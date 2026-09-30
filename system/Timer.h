@@ -7,6 +7,16 @@ using TimePoint = Clock::time_point;                    //ns級時間點 透過�
 
 class Timer {
 public:
+    Timer(int target_fps = 60) :
+        m_deltaTime(0.0),
+        m_currentFPS(0)
+    {
+        SetTargetFPS(target_fps);
+        m_frameStart = Clock::now();
+        m_nextFrameTarget = Clock::now();
+    }
+    ~Timer() = default;
+
     Timer(const Timer&) = delete;
     Timer(Timer&&) = delete;
     Timer& operator=(const Timer&) = delete;
@@ -18,11 +28,6 @@ public:
 
     float GetDeltaTime() const;
     int GetFPS() const;
-
-    static Timer& GetInstance() {
-        static Timer instance;
-        return instance;
-    }
 
 private:
     //依照 FPS 判斷 busy-wait設計
@@ -38,14 +43,4 @@ private:
     float   fpsTimer = 0.0f;
     int     frameCount = 0;
     int     m_currentFPS;
-
-    Timer(int target_fps = 60): 
-        m_deltaTime(0.0),
-        m_currentFPS(0) 
-    {
-        SetTargetFPS(target_fps);
-        m_frameStart = Clock::now();
-        m_nextFrameTarget = Clock::now();
-    }
-    ~Timer() = default;
 };
