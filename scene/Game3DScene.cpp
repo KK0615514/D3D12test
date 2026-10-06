@@ -1,12 +1,15 @@
 #include "Game3DScene.h"
 
+#include <cstddef>
+#include <stdexcept>
+
 Game3DScene::Game3DScene(GameContext& ctx) :IScene(ctx)
 {
     m_camera = m_registry.create();
     m_registry.emplace<Transform>(m_camera);
     m_registry.emplace<Camera>(m_camera);
 
-    m_registry.emplace<Transform>(m_player);
+    //m_registry.emplace<Transform>(m_player);
 }
 
 void Game3DScene::Update() {
@@ -191,12 +194,16 @@ void Game3DScene::SpwanAndMoveEnemy() {
     // 複製貼上 存活確認
     std::vector<entt::entity> expired;
     auto dlview = m_registry.view<Lifetime>();
+
+    // 確認存活與否 死人丟expired
     for (auto&& [entity, lifetime] : dlview.each()) {
         lifetime.time -= delta;
         if (lifetime.time <= 0.0f) {
             expired.push_back(entity);
         }
     }
+
+    // 處刑
     for (const auto entity : expired) {
         m_registry.destroy(entity);
     }
@@ -204,7 +211,6 @@ void Game3DScene::SpwanAndMoveEnemy() {
     //資料寫進 m_renderData.instancedata 
     auto view = m_registry.view<Transform, Speed>();
     for (auto&& [entity, transform, speed] : view.each()) {
-        auto& transform = view.get<Transform>(entity);
 
         // --- 以下完全繼承您原本的 DirectX 運算邏輯 ---
         DirectX::XMVECTOR vScale = DirectX::XMLoadFloat3(&transform.scale);
@@ -251,18 +257,36 @@ void Game3DScene::SpwanAndMoveEnemy() {
     }
     //moveSystem();
 
-    m_renderData.batches.push_back(RenderBatch{
-        .pso = PsoType::MeshDebug,
-        .mesh = m_meshes.at(0), // 暫時值，之後換成載入取得的 handle 物件名稱.second這樣
-        .instanceOffset = 0,
-        .instanceCount = static_cast<uint32_t>(m_renderData.instanceDatas.size())
+    const auto meshEnemy = m_meshes.find("test");
+
+    if (meshEnemy != m_meshes.end())
+    {
+        m_renderData.batches.push_back(RenderBatch{
+            .pso = PsoType::MeshDebug,
+            .mesh = meshEnemy->second,
+            .instanceOffset = 0,
+            .instanceCount = static_cast<uint32_t>(m_renderData.instanceDatas.size())
         });
+    }
 }
 
 
 
-void Game3DScene::SetMeshes(std::vector<MeshHandle> meshes){
-    m_meshes = std::move(meshes); 
+void Game3DScene::SetMeshes(std::vector<MeshHandle> meshes) {
+    if (test.size() != meshes.size()) {
+        throw std::invalid_argument(
+            "GPU回傳handle數量對不上 載入時的meshes數量"
+        );
+    }
+
+    std::unordered_map<std::string, MeshHandle> meshMap;
+    meshMap.reserve(test.size());
+
+    for (std::size_t i = 0; i < test.size(); ++i) {
+        meshMap.insert_or_assign(test[i], meshes[i]);
+    }
+
+    m_meshes = std::move(meshMap);
 }
 
 const SceneRenderData& Game3DScene::GetRenderData() const {

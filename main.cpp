@@ -45,12 +45,9 @@ int main(int argc, char* argv[]) {
     //初始Scene設定 
     std::unique_ptr<IScene> currentScene = std::make_unique<Game3DScene>(m_ctx);
     
-    //test
-    std::vector<std::string> test;
-    test.emplace_back("asset/model/test.glb");
-
+    //test  
     currentScene->SetMeshes(
-        m_renderSystem->LoadMeshes(test)
+        m_renderSystem->LoadMeshes(currentScene->test)
     );
 
     // ─── 主迴圈 ───

@@ -3,7 +3,7 @@
 #include <thread>
 
 using Clock = std::chrono::steady_clock;
-using TimePoint = Clock::time_point;                    //ns級時間點 透過大量計算精確時間點得出 deltatime 跟 FPS
+using TimePoint = Clock::time_point;                    // ns級時間點 透過大量計算精確時間點得出 deltatime 跟 FPS
 
 class Timer {
 public:

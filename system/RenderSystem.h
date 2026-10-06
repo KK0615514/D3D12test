@@ -33,7 +33,7 @@ public:
 	void Shutdown();
 
 	//test
-	std::vector<MeshHandle> LoadMeshes(const std::vector<std::string>& paths);
+	std::vector<MeshHandle> LoadMeshes(const std::vector<std::string>& objects);
 
 private:
 	 std::unique_ptr<D3D12Engine>			m_d3d12Engine;

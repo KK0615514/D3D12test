@@ -2,13 +2,14 @@
 #include <memory>
 #include <vector>
 #include <utility>
+#include <string>
+#include <unordered_map>
 
 #include "entt/entt.hpp"
 
 #include "system/Timer.h"
 #include "system/InputManager.h"
 #include "system/RenderHandle.h"
-
 
 #include <DirectXMath.h>
 
@@ -69,8 +70,13 @@ public:
     virtual void SetMeshes(std::vector<MeshHandle> meshes) = 0;
     virtual const SceneRenderData& GetRenderData() const = 0;
     
+    //test
+    std::vector<std::string> test{ 
+        std::string{"test"} 
+    };
+
 protected:
-    std::vector<MeshHandle> m_meshes;
+    std::unordered_map<std::string, MeshHandle> m_meshes;
     GameContext& m_ctx;
 
 private:

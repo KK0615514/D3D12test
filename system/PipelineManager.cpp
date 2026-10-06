@@ -1,8 +1,8 @@
 #include "PipelineManager.h"
 
+#include <cstddef>
 //test
 #include "MeshData.h"
-#include <cstddef>
 
 void PipelineManager::Init() {
 	InitializePSO();

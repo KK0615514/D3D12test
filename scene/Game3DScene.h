@@ -24,6 +24,7 @@ public:
 	void MoveSystem();
 	void SpwanAndMoveEnemy();
 	void RotateCamera();
+
 	//test
 
 	void SetMeshes(std::vector<MeshHandle> meshes) override;
@@ -37,14 +38,10 @@ private:
 	entt::entity m_player;
 	entt::entity m_camera;
 	
-
 private:
 	//  test
 	float m_cameraYaw = 0.0f;
 	float m_cameraPitch = 0.0f;
-
-
-
 	int m_lastMouseX = 0;
 	int m_lastMouseY = 0;
 	bool m_cameraDragging = false;

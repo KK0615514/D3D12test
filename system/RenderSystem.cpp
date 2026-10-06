@@ -74,11 +74,17 @@ void RenderSystem::LoadTexture() {
 
 // test 看情況取代上面 
 // 上面目前沒用
-std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>& paths) {
+std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>& objects) {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
     ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
     ID3D12GraphicsCommandList1* copyList = m_queueManager->GetList(QueueType::Copy);
-    std::vector<MeshLoadResult> results(10);    //預設容量 10
+    std::vector<MeshLoadResult> results;  
+    results.reserve(objects.size());
+
+    std::vector<std::string> paths;
+    for (auto& object : objects) {
+        paths.emplace_back("asset/model/" + object +".glb");
+    }
 
     m_queueManager->BeginCommandRecording(QueueType::Copy, currentFrame);
     for (auto path : paths) {
