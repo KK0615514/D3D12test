@@ -15,18 +15,21 @@ public:
 	void InitRootSig();
 	void InitDevice();
 	void InitSwapChain(HWND hwnd, ID3D12CommandQueue* Queue);
+	void InitDepthBuffer();
 
 	void Update();
 	void Shutdown();
 
 	void UpdateSwapChainBackBufferIndex();
 
-	ID3D12Device4*			GetDevice() const;
-	ID3D12RootSignature*	GetRootsig() const;
-	ID3D12Resource*			GetBackBuffer() const;
-	ID3D12DescriptorHeap*	GetRtvHeap() const;
-	uint32_t				GetRtvDescriptorSize() const;
-	uint32_t				GetFrameIndex() const;
+	ID3D12Device4*				GetDevice() const;
+	ID3D12RootSignature*		GetRootsig() const;
+	ID3D12Resource*				GetBackBuffer() const;
+	ID3D12DescriptorHeap*		GetRtvHeap() const;
+	uint32_t					GetRtvDescriptorSize() const;
+	uint32_t					GetFrameIndex() const;
+
+	D3D12_CPU_DESCRIPTOR_HANDLE GetDsvHandle() const;
 
 private:
 	static constexpr uint32_t FrameCount = Common::BackBufferCount;
@@ -44,6 +47,10 @@ private:
 
 	//當前SwapChain的Buffer編號
 	uint32_t							m_frameIndex = 0;
+
+	//DSV
+	ComPtr<ID3D12DescriptorHeap>		m_dsvHeap;
+	ComPtr<ID3D12Resource>				m_depthBuffer;
 
 	uint32_t							m_height;
 	uint32_t							m_width;

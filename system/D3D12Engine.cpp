@@ -78,7 +78,14 @@ void D3D12Engine::InitSwapChain(HWND hwnd, ID3D12CommandQueue* Queue){
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
     for (uint32_t i = 0; i < FrameCount; i++)
     {
-        m_swapChain->GetBuffer(i,IID_PPV_ARGS(& m_renderTargets[i]));
+        Common::ThrowIfFailed(
+            m_swapChain->GetBuffer(
+                i,
+                IID_PPV_ARGS(&m_renderTargets[i])
+            ),
+            "Swapchain GetBuffer建立失敗"
+        );
+
         m_device->CreateRenderTargetView(m_renderTargets[i].Get(), nullptr, rtvHandle);
         rtvHandle.ptr += m_rtvDescriptorSize;
     }
@@ -96,10 +103,10 @@ void D3D12Engine::InitRootSig() {
     texRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
 
     //建立 root slot 參數
-    D3D12_ROOT_PARAMETER1 rootParameter[3]{};
+    D3D12_ROOT_PARAMETER1 rootParameter[4]{};
     //slot0 : texture srv 
     rootParameter[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameter[0].DescriptorTable.NumDescriptorRanges = 1;      //包含一個Range 也就是一個descriptor heap
+    rootParameter[0].DescriptorTable.NumDescriptorRanges = 1;      // t0,space0          包含一個Range 也就是一個descriptor heap
     rootParameter[0].DescriptorTable.pDescriptorRanges = &texRange;
     rootParameter[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // 圖片通常只在 Pixel Shader 使用
     //slot1 : sb srv
@@ -112,6 +119,12 @@ void D3D12Engine::InitRootSig() {
     rootParameter[2].Descriptor.ShaderRegister = 0; // b0, space0
     rootParameter[2].Descriptor.RegisterSpace = 0;
     rootParameter[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    //slot3 : root cb (Instance offset)
+    rootParameter[3].ParameterType =D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    rootParameter[3].Constants.ShaderRegister = 1; // b1, space0
+    rootParameter[3].Constants.RegisterSpace = 0;
+    rootParameter[3].Constants.Num32BitValues = 1;
+    rootParameter[3].ShaderVisibility =D3D12_SHADER_VISIBILITY_VERTEX;
 
     // 定義static sampler desc for root signature
     D3D12_STATIC_SAMPLER_DESC imageSampler{};
@@ -135,7 +148,7 @@ void D3D12Engine::InitRootSig() {
 
     // 綁定至root signature desc	只顯示圖片 所以只有一個srv+sampler
     D3D12_ROOT_SIGNATURE_DESC1 rootSigDesc{};
-    rootSigDesc.NumParameters = 3;
+    rootSigDesc.NumParameters = 4;
     rootSigDesc.pParameters = rootParameter;
     rootSigDesc.NumStaticSamplers = 1;
     rootSigDesc.pStaticSamplers = &imageSampler; // 帶入靜態採樣器 首位址
@@ -152,12 +165,74 @@ void D3D12Engine::InitRootSig() {
         D3D12SerializeVersionedRootSignature(&versionedDesc,&signatureBlob,&errorBlob),
         "Root Signature序列化失敗"
     );
+    Common::ThrowIfFailed(
+        m_device->CreateRootSignature(
+            0,
+            signatureBlob->GetBufferPointer(),
+            signatureBlob->GetBufferSize(),
+            IID_PPV_ARGS(&m_rootSignature)
+        ),
+        "Rootsig建立失敗"
+    );
+}
 
-    m_device->CreateRootSignature(
-        0,
-        signatureBlob->GetBufferPointer(),
-        signatureBlob->GetBufferSize(),
-        IID_PPV_ARGS(&m_rootSignature)
+void D3D12Engine::InitDepthBuffer() {
+    // type是用 DSV heap
+    D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
+    heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+    heapDesc.NumDescriptors = 1;
+    heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+
+    Common::ThrowIfFailed(
+        m_device->CreateDescriptorHeap(
+            &heapDesc,
+            IID_PPV_ARGS(&m_dsvHeap)
+        ),
+        "DSV heap建立失敗"
+    );
+
+    D3D12_HEAP_PROPERTIES heapProps{};
+    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+    heapProps.CreationNodeMask = 1;             
+    heapProps.VisibleNodeMask = 1;
+
+    D3D12_RESOURCE_DESC depthDesc{};
+    depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    depthDesc.Width = m_width;
+    depthDesc.Height = m_height;
+    depthDesc.DepthOrArraySize = 1;
+    depthDesc.MipLevels = 1;
+    depthDesc.Format = DXGI_FORMAT_D32_FLOAT;
+    depthDesc.SampleDesc.Count = 1;
+    depthDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+
+    D3D12_CLEAR_VALUE clearValue{};
+    clearValue.Format = DXGI_FORMAT_D32_FLOAT;
+    clearValue.DepthStencil.Depth = 1.0f;
+    clearValue.DepthStencil.Stencil = 0;
+
+    Common::ThrowIfFailed(
+        m_device->CreateCommittedResource(
+            &heapProps,
+            D3D12_HEAP_FLAG_NONE,
+            &depthDesc,
+            D3D12_RESOURCE_STATE_DEPTH_WRITE,
+            &clearValue,
+            IID_PPV_ARGS(&m_depthBuffer)
+        ),
+        "Depth buffer creation failed"
+    );
+
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+    dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+    dsvDesc.Texture2D.MipSlice = 0;
+
+    m_device->CreateDepthStencilView(
+        m_depthBuffer.Get(),
+        &dsvDesc,
+        GetDsvHandle()
     );
 }
 
@@ -172,7 +247,10 @@ void D3D12Engine::Shutdown() {
 }
 
 void D3D12Engine::UpdateSwapChainBackBufferIndex() {
-    m_swapChain->Present(0, 0);//DXGI_PRESENT_ALLOW_TEARING
+    Common::ThrowIfFailed(
+        m_swapChain->Present(0, 0),
+        "Swapchain Present 失敗"
+    );
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 }
 
@@ -198,4 +276,8 @@ uint32_t D3D12Engine::GetRtvDescriptorSize() const{
 
 uint32_t D3D12Engine::GetFrameIndex() const{
     return m_frameIndex;
+}
+
+D3D12_CPU_DESCRIPTOR_HANDLE D3D12Engine::GetDsvHandle() const {
+    return m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
 }

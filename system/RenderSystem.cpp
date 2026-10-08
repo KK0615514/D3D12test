@@ -1,5 +1,7 @@
 #include "RenderSystem.h"
 
+#include <cstddef>
+
 #include "system/RenderData.h"
 
 void RenderSystem::Init(HWND hwnd) {
@@ -10,6 +12,7 @@ void RenderSystem::Init(HWND hwnd) {
     m_queueManager = std::make_unique<QueueManager>(m_device);
     m_queueManager->Init();
     m_d3d12Engine->InitSwapChain(hwnd, m_queueManager->GetQueue(QueueType::Direct));
+    m_d3d12Engine->InitDepthBuffer();
     m_d3d12Engine->InitRootSig();
     ID3D12RootSignature* m_rootsig = m_d3d12Engine->GetRootsig();
 
@@ -19,13 +22,14 @@ void RenderSystem::Init(HWND hwnd) {
 	m_textureManager = std::make_unique<TextureManager>(m_device);
 	m_textureManager->Init();
 
+    //預設只有一種rootsig
     m_pipelineManager = std::make_unique<PipelineManager>(m_device, m_rootsig);
     m_pipelineManager->Init();
 
     InitializeViewPortAndScissorRect();
-    //LoadTexture();
 }
 
+// 之後隨著視窗變形 或是想要啥鏡頭效果會需要提供 set這兩項的功能
 void RenderSystem::InitializeViewPortAndScissorRect() {
     screenViewport.TopLeftX = 0.0f;
     screenViewport.TopLeftY = 0.0f;
@@ -41,7 +45,7 @@ void RenderSystem::InitializeViewPortAndScissorRect() {
 }
 
 // 很醜 要大修 現在不只texture 還有 mesh   
-// 後續改成回傳 texture handle
+/*// 後續改成回傳 texture handle 給Scene 跟下面一樣
 void RenderSystem::LoadTexture() {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
     ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
@@ -71,9 +75,8 @@ void RenderSystem::LoadTexture() {
     m_textureManager->ClearUploadBuffer();
     m_resourceManager->ClearUploadBuffer();
 }
+*/
 
-// test 看情況取代上面 
-// 上面目前沒用
 std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>& objects) {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
     ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
@@ -82,6 +85,7 @@ std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>&
     results.reserve(objects.size());
 
     std::vector<std::string> paths;
+    // 把物件名稱擴充成指定路徑 
     for (auto& object : objects) {
         paths.emplace_back("asset/model/" + object +".glb");
     }
@@ -101,6 +105,7 @@ std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>&
     }
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
 
+    // 寫死的全部flush 之後改成動態檢測狀態 任務完成的才沖掉
     m_queueManager->FlushCommandQueue(QueueType::Direct);
 
     m_textureManager->ClearUploadBuffer();
@@ -118,13 +123,14 @@ std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>&
 void RenderSystem::Update(const SceneRenderData& data) {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
 
-    //一幀的開始 啟用direct queue
+    // 一幀的開始 啟用direct queue
     m_queueManager->WaitFrameReady(QueueType::Direct, currentFrame);
-    //目前Iscene 只持有一組vector + InstanceCount
-    m_resourceManager->Update(data, currentFrame);       //更新CB SB
+
+    // 等待前一幀Fence完成後才更新CB SB    避免極大量物件時cmdlist還在讀取資料 然後Buffer就更新了
+    // 我猜測 之前80000大便會閃爍就是Buffer還沒讀取畫完就更新下一幀的資料 因此造成閃爍
+    m_resourceManager->Update(data, currentFrame);       
 }
 
-// 流程有待簡化
 void RenderSystem::Render(const SceneRenderData& data) {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
 
@@ -132,11 +138,7 @@ void RenderSystem::Render(const SceneRenderData& data) {
 
     BindGlobalRenderResource(currentFrame);
     SetViewAndScissor();
-    
     ClearBackBuffer(currentFrame);
-    //目前無2D物件
-    //DrawTexturePass();
-    //test
     DrawMeshPass(data);
     TransitionBackBuffer(currentFrame);
 
@@ -188,6 +190,7 @@ void RenderSystem::SetViewAndScissor() {
 void RenderSystem::ClearBackBuffer(uint32_t currentFrame) {
     ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
     ID3D12Resource* pBackBuffer = m_d3d12Engine->GetBackBuffer();
+    const auto dsvHandle = m_d3d12Engine->GetDsvHandle();
 
     //建立Barrier 更改SwapChian當前Buffer的狀態
     D3D12_RESOURCE_BARRIER barrier{};
@@ -200,42 +203,64 @@ void RenderSystem::ClearBackBuffer(uint32_t currentFrame) {
     //指定目前這幀的swapchain rtv
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_d3d12Engine->GetRtvHeap()->GetCPUDescriptorHandleForHeapStart();
     rtvHandle.ptr += m_d3d12Engine->GetRtvDescriptorSize() * currentFrame;
-    cmdList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+    cmdList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
 
     //刷新畫面
     const float clearColor[] = { 0.1f, 0.2f, 0.4f, 1.0f };
-    cmdList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
+    cmdList->ClearRenderTargetView(
+        rtvHandle, 
+        clearColor, 
+        0, 
+        nullptr
+    );
+    //刷新dsv
+    cmdList->ClearDepthStencilView(
+        dsvHandle,
+        D3D12_CLEAR_FLAG_DEPTH,
+        1.0f,
+        0,
+        0,
+        nullptr
+    );
 }
 
-// Render流程 - 4 Pass            有待修改 現在count 是亂填的 等到handle做完 才能完整
-void RenderSystem::DrawTexturePass(const SceneRenderData& data){
-    MeshHandle texture{ 0 };
-    const auto& mesh = m_resourceManager->GetMesh(texture);
-    ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
-
-    //綁定PSO
-    cmdList->SetPipelineState(m_pipelineManager->GetPso(PsoType::TextureLoader));
-    //綁定設定好的VB IB
-    cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    cmdList->IASetVertexBuffers(0, 1, &mesh.vertexBufferView);
-    cmdList->IASetIndexBuffer(&mesh.indexBufferView);
-    //實際作畫
-    cmdList->DrawIndexedInstanced(mesh.indexCount, 1, 0, 0, 0);
-}
-
-// Render流程 - 4 test Pass       有待修改 現在count 是亂填的 等到handle做完 才能完整
+// Render流程 - 4 Mesh Pass       
 void RenderSystem::DrawMeshPass(const SceneRenderData& data) {
     ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
-    cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+    cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     for (const auto& batch : data.batches) {
-        //改
-        const auto& mesh = m_resourceManager->GetMesh(batch.mesh);
+        const std::size_t offset = batch.instanceOffset;
+        const std::size_t count = batch.instanceCount;
+        const std::size_t total = data.instanceDatas.size();
+
+        // 若當前物件Instance數量為0 則跳過當前batch
+        if (count == 0) {
+            continue;
+        }
+
+        // 若當前物件Instance數量超過當前總Instance數量 表示傳入資料有誤 跳過
+        if (offset > total || count > total - offset) {
+            continue;
+        }
+
+        // 無效handle 缺少buffer 則跳過當前batch
+        const auto* meshPtr = m_resourceManager->TryGetMesh(batch.mesh);
+        if (!meshPtr) {
+            continue; 
+        }
+        const auto& mesh = *meshPtr;
+
         cmdList->SetPipelineState(m_pipelineManager->GetPso(batch.pso));
+        cmdList->SetGraphicsRoot32BitConstant(
+            static_cast<UINT>(RootSlot::InstanceOffset),
+            batch.instanceOffset,
+            0
+        );
 
         cmdList->IASetVertexBuffers(0, 1, &mesh.vertexBufferView);
         cmdList->IASetIndexBuffer(&mesh.indexBufferView);
-        cmdList->DrawIndexedInstanced(mesh.indexCount, batch.instanceCount, 0, 0, batch.instanceOffset);
+        cmdList->DrawIndexedInstanced(mesh.indexCount, batch.instanceCount, 0, 0, 0);
     }
 }
 
@@ -253,17 +278,9 @@ void RenderSystem::TransitionBackBuffer(uint32_t currentFrame) {
     cmdList->ResourceBarrier(1, &barrier);
 }
 
-
-
+// 主迴圈最後釋放資源
 void RenderSystem::Shutdown() {
-
+    m_queueManager->FlushCommandQueue(QueueType::Copy);
+    m_queueManager->FlushCommandQueue(QueueType::Compute);
+    m_queueManager->FlushCommandQueue(QueueType::Direct);
 }
-
-
-/*
-handle存取做完 
-    動loadtexture 改名字 改流程 
-    動兩個pass 
-
-單子系統整體弄完 回頭弄update 跟render 不然現在很醜
-*/

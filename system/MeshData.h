@@ -3,19 +3,13 @@
 #include <cstdint>
 #include <vector>
 
-// 2D 點座標
-struct Vertex
-{
-	DirectX::XMFLOAT3 position;
-	DirectX::XMFLOAT2 uv;
-};
-
 // 3D物件頂點座標
 struct MeshVertex {
 	DirectX::XMFLOAT3 position;
-	DirectX::XMFLOAT3 normal;
 	DirectX::XMFLOAT2 uv;
 
+	// 適用於法線貼圖
+	DirectX::XMFLOAT3 normal;
 	DirectX::XMFLOAT4 tangent;
 };
 

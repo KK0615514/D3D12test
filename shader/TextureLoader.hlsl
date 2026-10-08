@@ -5,11 +5,10 @@ struct VS_INPUT
 };
 struct VS_OUTPUT
 {
-    float4 pos : SV_POSITION; 
-    float2 uv : TEXCOORD; 
-    uint texIndex : TEX_INDEX; 
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD;
+    nointerpolation uint texIndex : TEX_INDEX;
 };
-
 struct ObjectData
 {
     matrix WorldMatrix;
@@ -37,7 +36,7 @@ VS_OUTPUT VSMain(VS_INPUT input, uint instanceID : SV_InstanceID)
     float4 worldPos = mul(float4(input.pos, 1.0f), data.WorldMatrix);
     output.pos = mul(worldPos, g_ViewProj);
 
-    output.uv = float2(input.uv.x, input.uv.y);
+    output.uv = input.uv;
     output.texIndex = data.TextureIndex;
 
     return output;

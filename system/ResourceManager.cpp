@@ -13,8 +13,7 @@ void ResourceManager::Update(const SceneRenderData& data, uint32_t currentFrame)
     UpdateInstanceSB(data, currentFrame);
 }
 
-
-
+/*
 MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList) {
 
     MeshGpuResource gpuMesh{};
@@ -161,32 +160,35 @@ MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList
     m_meshes.push_back(std::move(gpuMesh));
     return handle;
 }
+*/
 
 MeshLoadResult ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList) {
     const std::string key = path;
     const auto cachedHandle = m_meshCache.find(key);
 
+    // 檢查Handle來確認是否以載入 有則回傳
     if (cachedHandle != m_meshCache.end()) {
         return MeshLoadResult{ cachedHandle->second,false };
     }
 
     MeshData meshData = LoadGlbMeshData(path);
 
+    // 檢查GLB回傳是否為空
     if (meshData.vertices.empty() || meshData.indices.empty()) {
-        throw std::runtime_error("GLB 沒有資料");
+        throw std::runtime_error("LoadMesh : GLB 沒有資料");
     }
 
     MeshGpuResource gpuMesh{};
     gpuMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
     gpuMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
 
-    //設定uint64_t 避免模型太大截斷
+    // 設定uint64_t 避免模型太大截斷
     const uint64_t vbSize = uint64_t(meshData.vertices.size()) * sizeof(MeshVertex);
     const uint64_t ibSize = uint64_t(meshData.indices.size()) * sizeof(uint32_t);
     if (vbSize > UINT32_MAX || ibSize > UINT32_MAX)
-        throw std::runtime_error("Mesh buffer is too large");
+        throw std::runtime_error("LoadMesh : Mesh buffer 用的VB IB 溢位UINT32");
 
-    //建立default buffer
+    // 建立default buffer
     D3D12_RESOURCE_DESC vbDesc{};   
     vbDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
     vbDesc.Width = vbSize;
@@ -307,6 +309,7 @@ MeshLoadResult ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommand
     gpuMesh.indexBufferView.SizeInBytes = static_cast<uint32_t>(ibSize);
     gpuMesh.indexBufferView.Format = DXGI_FORMAT_R32_UINT;
 
+    // 目前只追加 不刪除或重排 所以使用size來設計的Handle 除此之外跟meshCache無依賴關係  
     MeshHandle handle{
         static_cast<uint32_t>(m_meshes.size())
     };
@@ -318,7 +321,15 @@ MeshLoadResult ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommand
 }
 
 void ResourceManager::TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* m_commandList) {
-    MeshGpuResource mesh = GetMesh(handle);
+    const MeshGpuResource* meshPtr = TryGetMesh(handle);
+
+    if (!meshPtr) {
+        throw std::runtime_error(
+            "TransitionMeshBuffer : 錯誤的handle或是buffer"
+        );
+    }
+
+    const MeshGpuResource& mesh = *meshPtr;
 
     D3D12_RESOURCE_BARRIER barriers[2]{};
 
@@ -345,11 +356,21 @@ void ResourceManager::ClearUploadBuffer() {
     }
 }
 
-const MeshGpuResource& ResourceManager::GetMesh(MeshHandle handle) const {
-    return m_meshes.at(handle.id);
+const MeshGpuResource* ResourceManager::TryGetMesh(MeshHandle handle) const {
+    // 檢查handle是否超出邊界
+    if (handle.id >= m_meshes.size()) {
+        return nullptr;
+    }
+    const auto& mesh = m_meshes[handle.id];
+    // 檢查VB IB 是否為空
+    if (!mesh.vertexBuffer || !mesh.indexBuffer) {
+        return nullptr;
+    }
+
+    return &mesh;
 }
 
-
+ 
 
 void ResourceManager::InitializeConstantBuffer() {
     D3D12_HEAP_PROPERTIES heapProps = {};
@@ -377,16 +398,23 @@ void ResourceManager::InitializeConstantBuffer() {
     {
         for (uint32_t i = 0;i < MaxCBVsPerFrame;++i)
         {
-            m_device->CreateCommittedResource(
-                &heapProps,
-                D3D12_HEAP_FLAG_NONE,
-                &resourceDesc,
-                D3D12_RESOURCE_STATE_GENERIC_READ,
-                nullptr,
-                IID_PPV_ARGS(&m_constantBuffer[f][i])
+            Common::ThrowIfFailed(
+                m_device->CreateCommittedResource(
+                    &heapProps,
+                    D3D12_HEAP_FLAG_NONE,
+                    &resourceDesc,
+                    D3D12_RESOURCE_STATE_GENERIC_READ,
+                    nullptr,
+                    IID_PPV_ARGS(&m_constantBuffer[f][i])
+                ),
+                "CB建立失敗"
             );
             D3D12_RANGE readRange = { 0, 0 }; // CPU 不需要讀取這段記憶體 設為空
-            m_constantBuffer[f][i]->Map(0, &readRange, reinterpret_cast<void**>(&m_cbvCpuAdress[f][i]));
+            Common::ThrowIfFailed(
+                m_constantBuffer[f][i]->Map(0, &readRange, reinterpret_cast<void**>(&m_cbvCpuAdress[f][i])),
+                "CB 用map建立失敗"
+            );
+
         }
     }
 }
@@ -414,16 +442,23 @@ void ResourceManager::InitializeStructureBuffer() {
 
     for (uint32_t i = 0; i < FrameCount; i++)
     {
-        m_device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &bufferDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&m_structureBuffer[i])
+        Common::ThrowIfFailed(
+            m_device->CreateCommittedResource(
+                &heapProps,
+                D3D12_HEAP_FLAG_NONE,
+                &bufferDesc,
+                D3D12_RESOURCE_STATE_GENERIC_READ,
+                nullptr,
+                IID_PPV_ARGS(&m_structureBuffer[i])
+            ),
+            "SB 建立失敗"
         );
         D3D12_RANGE readRange = { 0, 0 }; // CPU 不需要讀取這段記憶體 設為空
-        m_structureBuffer[i]->Map(0, &readRange, reinterpret_cast<void**>(&m_structureBufferCpuAddress[i]));
+        Common::ThrowIfFailed(
+            m_structureBuffer[i]->Map(0, &readRange, reinterpret_cast<void**>(&m_structureBufferCpuAddress[i])),
+            "SB 用指標map失敗"
+        );
+        
     }
 }
 
@@ -435,6 +470,19 @@ void ResourceManager::UpdatePerFrameCB(const SceneRenderData& data, uint32_t cur
 }
 
 void ResourceManager::UpdateInstanceSB(const SceneRenderData& data, uint32_t currentFrame){
+    // 檢查當前幀的Instance count是否超過 SB最大容量
+    if (data.instanceDatas.size() > MAX_ELEMENTS) {
+        throw std::runtime_error(
+            "UpdateInstanceSB : Instance count 超過最大容量: " +
+            std::to_string(MAX_ELEMENTS)
+        );
+    }
+
+    // 檢查SB是否為空
+    if (data.instanceDatas.empty()) {
+        return;
+    }
+    
     memcpy(m_structureBufferCpuAddress[currentFrame],
         data.instanceDatas.data(),
         data.instanceDatas.size() * sizeof(InstanceData)

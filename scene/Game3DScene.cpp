@@ -164,7 +164,7 @@ void Game3DScene::SpwanAndMoveEnemy() {
     m_renderData.batches.clear();
     auto delta = m_ctx.m_timer.GetDeltaTime();
     //亂寫生怪
-    for (int i = 1;i <= 1;i++)
+    for (int i = 1;i <= 20;i++)
     {
         float rx = Xoshiro128::Random() - 0.5f;
         float ry = Xoshiro128::Random() - 0.5f;
@@ -265,7 +265,7 @@ void Game3DScene::SpwanAndMoveEnemy() {
             .pso = PsoType::MeshDebug,
             .mesh = meshEnemy->second,
             .instanceOffset = 0,
-            .instanceCount = static_cast<uint32_t>(m_renderData.instanceDatas.size())
+            .instanceCount = static_cast<uint32_t>(m_renderData.instanceDatas.size()) 
         });
     }
 }
@@ -275,7 +275,7 @@ void Game3DScene::SpwanAndMoveEnemy() {
 void Game3DScene::SetMeshes(std::vector<MeshHandle> meshes) {
     if (test.size() != meshes.size()) {
         throw std::invalid_argument(
-            "GPU回傳handle數量對不上 載入時的meshes數量"
+            "SetMeshes : GPU回傳handle數量對不上 載入時的meshes數量"
         );
     }
 

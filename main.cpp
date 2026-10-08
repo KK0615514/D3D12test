@@ -85,5 +85,7 @@ int main(int argc, char* argv[]) {
         m_input->EndFrame();                       //紀錄上一幀的按鍵
         m_timer->EndFrame();
     }
-    return (int)msg.wParam;
+        
+    m_renderSystem->Shutdown();
+    return static_cast<int>(msg.wParam);
 }

@@ -3,7 +3,6 @@
 
 enum class PsoType : std::size_t {
 	TextureLoader,
-	TextLoader,
 	MeshDebug,
 	Count
 };

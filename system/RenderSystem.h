@@ -13,8 +13,9 @@
 enum class RootSlot: UINT{
 	TextureTable = 0,
 	InstanceBuffer = 1,
-	PerFrameConstant = 2
-};
+	PerFrameConstant = 2,
+	InstanceOffset = 3
+};	
 
 class RenderSystem
 {

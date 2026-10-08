@@ -72,7 +72,8 @@ public:
     
     //test
     std::vector<std::string> test{ 
-        std::string{"test"} 
+        std::string{"test"},
+        std::string{"2Dmesh"}
     };
 
 protected:

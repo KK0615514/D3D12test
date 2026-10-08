@@ -7,31 +7,20 @@
 void PipelineManager::Init() {
 	InitializePSO();
 
-	//test
 	InitMeshPSO();
 }
 
 void PipelineManager::InitializePSO() {
-	D3D12_INPUT_ELEMENT_DESC inputElementDescs[] = {
-		// 1. 位置數據: 映射到頂點結構體的 position
+	const D3D12_INPUT_ELEMENT_DESC inputElementDescs[] = {
 		{
-			"POSITION",                     // HLSL 中的語義名稱
-			0,                              // 語義索引
-			DXGI_FORMAT_R32G32B32_FLOAT,    // 資料格式 (3個 float, 剛好是 XMFLOAT3)
-			0,                              // 輸入槽 (Input Slot)
-			0,                              // 記憶體偏移量 (從第 0 位元組開始)
-			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-			0
+			"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
+			static_cast<UINT>(offsetof(MeshVertex, position)),
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
 		},
-		// 2. UV 數據: 映射到頂點結構體的 texCoord
 		{
-			"TEXCOORD",                     // HLSL 中的語義名稱
-			0,                              // 語義索引
-			DXGI_FORMAT_R32G32_FLOAT,       // 資料格式 (2個 float, 剛好是 XMFLOAT2)
-			0,                              // 輸入槽
-			12,                             // 記憶體偏移量 (跳過前面的 Position 12 位元組)
-			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
-			0
+			"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0,
+			static_cast<UINT>(offsetof(MeshVertex, uv)),
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0
 		}
 	};
 	auto vsData = Common::LoadBinaryFile(L"shader/TextureLoader_vs.cso");
@@ -70,12 +59,12 @@ void PipelineManager::InitializePSO() {
 	// 設定輸出緩衝區格式
 	psoDesc.NumRenderTargets = 1;
 	psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;     // 配合Swapchain格式
+	psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 	psoDesc.SampleDesc.Count = 1;
 
 	m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psos[static_cast<int>(PsoType::TextureLoader)]));
 }
 
-//test
 void PipelineManager::InitMeshPSO() {
 	const D3D12_INPUT_ELEMENT_DESC layout[] = {
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
@@ -97,14 +86,16 @@ void PipelineManager::InitMeshPSO() {
 	desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
 	desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	desc.RasterizerState.DepthClipEnable = TRUE;
-	desc.BlendState.RenderTarget[0].RenderTargetWriteMask =
-		D3D12_COLOR_WRITE_ENABLE_ALL;
-	desc.DepthStencilState.DepthEnable = FALSE;
+	desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask =	D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
 	desc.DepthStencilState.StencilEnable = FALSE;
 	desc.SampleMask = UINT_MAX;
 	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	desc.NumRenderTargets = 1;
 	desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 	desc.SampleDesc.Count = 1;
 
 	Common::ThrowIfFailed(

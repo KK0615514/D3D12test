@@ -32,7 +32,7 @@ struct MeshGpuResource {
 	uint32_t vertexCount = 0;
 };
 
-// 檢查物件是否是新載入的
+// 檢查mesh是否是新載入的
 struct MeshLoadResult {
 	MeshHandle handle;
 	bool newlyCreated;
@@ -71,7 +71,7 @@ public:
 	void TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* m_commandList);
 	void ClearUploadBuffer();
 
-	const MeshGpuResource& GetMesh(MeshHandle handle) const;
+	const MeshGpuResource* TryGetMesh(MeshHandle handle) const;	//採用指標方便檢測 因為可以nullptr回傳
 
 private:
 	ComPtr<ID3D12Device4>			m_device;

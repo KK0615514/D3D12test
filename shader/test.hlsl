@@ -14,6 +14,11 @@ cbuffer PerFrameConstant : register(b0)
     float Padding;
 };
 
+cbuffer PerDrawConstant : register(b1)
+{
+    uint InstanceOffset;
+};
+
 struct VSInput
 {
     float3 position : POSITION;
@@ -28,7 +33,7 @@ struct VSOutput
 
 VSOutput VSMain(VSInput input, uint instanceID : SV_InstanceID)
 {
-    InstanceData instance = gInstances[instanceID];
+    InstanceData instance = gInstances[InstanceOffset + instanceID];
 
     VSOutput output;
     float4 worldPosition = mul(float4(input.position, 1.0f),
