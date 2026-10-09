@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    // 核心物件設定
+    // 核心物件設定 & 初始化
     std::unique_ptr<Timer> m_timer = std::make_unique<Timer>();
     std::unique_ptr<RenderSystem> m_renderSystem = std::make_unique<RenderSystem>();
     std::unique_ptr<InputManager> m_input = std::make_unique<InputManager>();
@@ -42,10 +42,13 @@ int main(int argc, char* argv[]) {
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
 
-    //初始Scene設定 
+    // 初始化Scene設定 
     std::unique_ptr<IScene> currentScene = std::make_unique<Game3DScene>(m_ctx);
     
-    //test  
+    // 載入資源  
+    currentScene->SetOceanMesh(
+        m_renderSystem->LoadOceanMesh(currentScene->GetOceanMeshData())
+    );
     currentScene->SetMeshes(
         m_renderSystem->LoadMeshes(currentScene->test)
     );
@@ -69,7 +72,7 @@ int main(int argc, char* argv[]) {
         currentScene->Update();
         const auto& data = currentScene->GetRenderData();
 
-        //test
+        // 確認fps instancecount
         static int a = 0;
         a++;
         if (a >= 144)

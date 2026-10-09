@@ -19,3 +19,13 @@ struct MeshData {
 	std::vector<uint32_t> indices;
 };
 
+// IFFT用 海洋頂點座標
+struct OceanVertex {
+	DirectX::XMFLOAT2 positionXZ;
+};
+
+// IFFT用 海洋頂點資料 & 順序
+struct OceanMeshData {
+	std::vector<OceanVertex> vertices;
+	std::vector<uint32_t> indices;
+};

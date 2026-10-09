@@ -17,18 +17,23 @@ set(CMAKE_CXX_STANDARD 20)
 add_executable(ECS  
     "main.cpp"
 
+    # 核心D3D12物件 & Window設定
     "system/Window.cpp" 
     "system/RenderSystem.cpp"   
     "system/D3D12Engine.cpp"
     "system/QueueManager.cpp"  
     "system/ResourceManager.cpp"
     "system/PipelineManager.cpp"  
+
+    # 其他系統物件
     "system/GlbLoader.cpp"
     "system/Timer.cpp"
+    "system/OceanMeshGenerator.cpp"
 
+    # Scene本體
     "scene/Game3DScene.cpp"   
 
-    #Entt
+    # Entt System
     "ecs_system/CameraSystem.cpp"
 
     #可刪除 placedresoource實作以前不動 

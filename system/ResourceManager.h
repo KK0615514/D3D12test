@@ -5,6 +5,7 @@
 #include <DirectXMath.h>
 	
 #include <string>				// 實作asset path cache
+#include <cstring>				// 使用std::memcpy
 #include <unordered_map>		// 實作asset path cache
 
 #include "system/CommonUtils.h"
@@ -66,12 +67,14 @@ public:
 	void Init();
 	void Update(const SceneRenderData& data, uint32_t currentFrame);
 
-	MeshHandle Load2DMesh(ID3D12GraphicsCommandList1* m_commandList);		//載入2D用的 VB*4 IB*6 
 	MeshLoadResult LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList);
 	void TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* m_commandList);
 	void ClearUploadBuffer();
 
-	const MeshGpuResource* TryGetMesh(MeshHandle handle) const;	//採用指標方便檢測 因為可以nullptr回傳
+	const MeshGpuResource* TryGetMesh(MeshHandle handle) const;	//採用指標 方便檢測 因為可以nullptr回傳
+
+	// test
+	MeshHandle LoadOceanMesh(const OceanMeshData& meshData, ID3D12GraphicsCommandList1* copyList);
 
 private:
 	ComPtr<ID3D12Device4>			m_device;

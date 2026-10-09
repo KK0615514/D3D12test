@@ -59,7 +59,9 @@ struct Lifetime {
     float time;
 };
 
+// 向前宣告
 struct SceneRenderData;
+struct OceanMeshData;
 
 class IScene {
 public:
@@ -67,13 +69,17 @@ public:
     virtual ~IScene() = default;
     virtual void Update() = 0;
 
+    // 
     virtual void SetMeshes(std::vector<MeshHandle> meshes) = 0;
     virtual const SceneRenderData& GetRenderData() const = 0;
     
+    virtual void SetOceanMesh(MeshHandle handle) = 0;
+    virtual const OceanMeshData& GetOceanMeshData() const = 0;
+
     //test
     std::vector<std::string> test{ 
-        std::string{"test"},
-        std::string{"2Dmesh"}
+        std::string{"2Dmesh"},
+        std::string{"test"}
     };
 
 protected:

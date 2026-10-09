@@ -3,8 +3,13 @@
 #include <cstddef>
 #include <stdexcept>
 
+#include "system/OceanMeshGenerator.h"
+
 Game3DScene::Game3DScene(GameContext& ctx) :IScene(ctx)
 {
+    // 初始化時建立 IFFT用 海洋細分Mesh
+    m_oceanMeshData = Ocean::GenerateOceanMesh(100.0f, 100.0f, 64, 64);
+
     m_camera = m_registry.create();
     m_registry.emplace<Transform>(m_camera);
     m_registry.emplace<Camera>(m_camera);
@@ -272,21 +277,23 @@ void Game3DScene::SpwanAndMoveEnemy() {
 
 
 
+void Game3DScene::SetOceanMesh(MeshHandle handle) {
+    m_meshes.insert_or_assign("Ocean", handle);
+}
+
+const OceanMeshData& Game3DScene::GetOceanMeshData() const {
+    return m_oceanMeshData;
+}
+
 void Game3DScene::SetMeshes(std::vector<MeshHandle> meshes) {
+    // 檢查參數合不合規
     if (test.size() != meshes.size()) {
-        throw std::invalid_argument(
-            "SetMeshes : GPU回傳handle數量對不上 載入時的meshes數量"
-        );
+        throw std::invalid_argument("SetMeshes : GPU回傳handle數量對不上 載入時的meshes數量");
     }
 
-    std::unordered_map<std::string, MeshHandle> meshMap;
-    meshMap.reserve(test.size());
-
-    for (std::size_t i = 0; i < test.size(); ++i) {
-        meshMap.insert_or_assign(test[i], meshes[i]);
+    for (size_t i = 0; i < test.size(); ++i) {
+        m_meshes.insert_or_assign(test[i], meshes[i]);
     }
-
-    m_meshes = std::move(meshMap);
 }
 
 const SceneRenderData& Game3DScene::GetRenderData() const {

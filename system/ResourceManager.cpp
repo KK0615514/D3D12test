@@ -13,23 +13,32 @@ void ResourceManager::Update(const SceneRenderData& data, uint32_t currentFrame)
     UpdateInstanceSB(data, currentFrame);
 }
 
-/*
-MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList) {
+
+
+MeshHandle ResourceManager::LoadOceanMesh(const OceanMeshData& meshData, ID3D12GraphicsCommandList1* copyList)
+{
+    // 檢查資料合不合規
+    if (!copyList || meshData.vertices.empty() || meshData.indices.empty()) {
+        throw std::invalid_argument("UploadOceanMesh: 無效輸入");
+    }
+    if (meshData.vertices.size() > UINT32_MAX / sizeof(OceanVertex) || meshData.indices.size() > UINT32_MAX / sizeof(uint32_t)) {
+        throw std::overflow_error("UploadOceanMesh: 超出buffer的最大上限");
+    }
+
+    const uint64_t vbSize = uint64_t(meshData.vertices.size()) * sizeof(OceanVertex);
+    const uint64_t ibSize = uint64_t(meshData.indices.size()) * sizeof(uint32_t);
 
     MeshGpuResource gpuMesh{};
-    gpuMesh.vertexCount = static_cast<uint32_t>(4);
-    gpuMesh.indexCount = static_cast<uint32_t>(6);
+    gpuMesh.vertexCount = static_cast<uint32_t>(meshData.vertices.size());
+    gpuMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
 
-    const uint64_t vbSize = gpuMesh.vertexCount * sizeof(Vertex);
-    const uint64_t ibSize = gpuMesh.indexCount * sizeof(uint32_t);
-
-    //建立default buffer
+    // 建立 default VB
     D3D12_HEAP_PROPERTIES heapProps{};
     heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
 
     D3D12_RESOURCE_DESC vbDesc{};
     vbDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    vbDesc.Width = vbSize; // 緩衝區總大小
+    vbDesc.Width = vbSize;
     vbDesc.Height = 1;
     vbDesc.DepthOrArraySize = 1;
     vbDesc.MipLevels = 1;
@@ -45,9 +54,10 @@ MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList
             D3D12_RESOURCE_STATE_COPY_DEST,
             nullptr,
             IID_PPV_ARGS(&gpuMesh.vertexBuffer)),
-        "2D貼圖用default VB建立失敗"
+        "Ocean default VB 建立失敗"
     );
 
+    // 建立 default IB
     D3D12_RESOURCE_DESC ibDesc = vbDesc;
     ibDesc.Width = ibSize;
 
@@ -59,14 +69,14 @@ MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList
             D3D12_RESOURCE_STATE_COPY_DEST,
             nullptr,
             IID_PPV_ARGS(&gpuMesh.indexBuffer)),
-        "2D貼圖用default IB建立失敗"
+        "Ocean default IB 建立失敗"
     );
 
-    //建立upload用buffer
-    D3D12_RESOURCE_DESC uploadVbDesc = vbDesc;
-
+    // 建立 upload VB
     D3D12_HEAP_PROPERTIES uploadHeapProps{};
     uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
+
+    D3D12_RESOURCE_DESC uploadVbDesc = vbDesc;
 
     Common::ThrowIfFailed(
         m_device->CreateCommittedResource(
@@ -76,9 +86,10 @@ MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList
             D3D12_RESOURCE_STATE_GENERIC_READ,
             nullptr,
             IID_PPV_ARGS(&gpuMesh.vertexUploadBuffer)),
-        "2D貼圖用upload VB建立失敗"
+        "Ocean upload VB 建立失敗"
     );
 
+    // 建立 upload IB
     D3D12_RESOURCE_DESC uploadIbDesc = ibDesc;
 
     Common::ThrowIfFailed(
@@ -89,53 +100,47 @@ MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList
             D3D12_RESOURCE_STATE_GENERIC_READ,
             nullptr,
             IID_PPV_ARGS(&gpuMesh.indexUploadBuffer)),
-        "2D貼圖用upload IB建立失敗"
+        "Ocean upload IB 建立失敗"
     );
 
-    // 寫入資料進VB
-    Vertex* pVertexDataBegin = nullptr;
-    D3D12_RANGE readRange = { 0, 0 };				// CPU 不需要讀取這段記憶體 設為空
-    gpuMesh.vertexUploadBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin));
-    for (size_t i = 0; i < 1; i++)
-    {
-        size_t vOffset = i * 4;
+    // CPU 頂點資料寫入 upload VB
+    D3D12_RANGE readRange{ 0, 0 };
+    void* mappedVbData = nullptr;
 
-        pVertexDataBegin[vOffset + 0] = Vertex{ { -0.5f, -0.5f, 0.0f }, { 0.0f, 0.0f } }; // 左上 
-        pVertexDataBegin[vOffset + 1] = Vertex{ {  0.5f, -0.5f, 0.0f }, { 1.0f, 0.0f } }; // 右上 
-        pVertexDataBegin[vOffset + 2] = Vertex{ {  0.5f,  0.5f, 0.0f }, { 1.0f, 1.0f } }; // 右下 
-        pVertexDataBegin[vOffset + 3] = Vertex{ { -0.5f,  0.5f, 0.0f }, { 0.0f, 1.0f } }; // 左下
-    }
+    Common::ThrowIfFailed(
+        gpuMesh.vertexUploadBuffer->Map(0, &readRange, &mappedVbData),
+        "Ocean VB Map 失敗"
+    );
+    std::memcpy(
+        mappedVbData,
+        meshData.vertices.data(),
+        static_cast<size_t>(vbSize)
+    );
     gpuMesh.vertexUploadBuffer->Unmap(0, nullptr);
 
-    // 寫入資料進IB
-    uint32_t* pIndexDataBegin = nullptr;
-    gpuMesh.indexUploadBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pIndexDataBegin));
-    for (size_t i = 0;i < 1; i++)
-    {
-        size_t vOffset = i * 4; // 每個物件佔用 4 個頂點
-        size_t iOffset = i * 6; // 每個物件佔用 6 個索引
-
-        // 三角形 1
-        pIndexDataBegin[iOffset + 0] = static_cast<uint32_t>(vOffset + 0); //左上
-        pIndexDataBegin[iOffset + 1] = static_cast<uint32_t>(vOffset + 1); //右上
-        pIndexDataBegin[iOffset + 2] = static_cast<uint32_t>(vOffset + 2); //右下
-
-        // 三角形 2
-        pIndexDataBegin[iOffset + 3] = static_cast<uint32_t>(vOffset + 2); //右下
-        pIndexDataBegin[iOffset + 4] = static_cast<uint32_t>(vOffset + 3); //左下
-        pIndexDataBegin[iOffset + 5] = static_cast<uint32_t>(vOffset + 0); //左上
-    }
+    // CPU 索引資料寫入 upload IB
+    void* mappedIbData = nullptr;
+    Common::ThrowIfFailed(
+        gpuMesh.indexUploadBuffer->Map(0, &readRange, &mappedIbData),
+        "Ocean IB Map 失敗"
+    );
+    std::memcpy(
+        mappedIbData,
+        meshData.indices.data(),
+        static_cast<size_t>(ibSize)
+    );
     gpuMesh.indexUploadBuffer->Unmap(0, nullptr);
 
-    //複製資料進default buffer
-    m_commandList->CopyBufferRegion(
+    // 記錄 upload → default 的複製指令
+    copyList->CopyBufferRegion(
         gpuMesh.vertexBuffer.Get(),
         0,
         gpuMesh.vertexUploadBuffer.Get(),
         0,
         vbSize
     );
-    m_commandList->CopyBufferRegion(
+
+    copyList->CopyBufferRegion(
         gpuMesh.indexBuffer.Get(),
         0,
         gpuMesh.indexUploadBuffer.Get(),
@@ -143,24 +148,25 @@ MeshHandle ResourceManager::Load2DMesh(ID3D12GraphicsCommandList1* m_commandList
         ibSize
     );
 
-    // 填寫VB View
+    // 填寫 VB View
     gpuMesh.vertexBufferView.BufferLocation = gpuMesh.vertexBuffer->GetGPUVirtualAddress();
     gpuMesh.vertexBufferView.SizeInBytes = static_cast<uint32_t>(vbSize);
-    gpuMesh.vertexBufferView.StrideInBytes = sizeof(Vertex);
+    gpuMesh.vertexBufferView.StrideInBytes = sizeof(OceanVertex);
 
-    // 填寫IB View
+    // 填寫 IB View
     gpuMesh.indexBufferView.BufferLocation = gpuMesh.indexBuffer->GetGPUVirtualAddress();
     gpuMesh.indexBufferView.SizeInBytes = static_cast<uint32_t>(ibSize);
     gpuMesh.indexBufferView.Format = DXGI_FORMAT_R32_UINT;
 
+    // 保留資源並取得 Handle
     MeshHandle handle{
-    static_cast<uint32_t>(m_meshes.size())
+        static_cast<uint32_t>(m_meshes.size())
     };
 
     m_meshes.push_back(std::move(gpuMesh));
+
     return handle;
 }
-*/
 
 MeshLoadResult ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList) {
     const std::string key = path;
@@ -185,8 +191,10 @@ MeshLoadResult ResourceManager::LoadMesh(const char* path, ID3D12GraphicsCommand
     // 設定uint64_t 避免模型太大截斷
     const uint64_t vbSize = uint64_t(meshData.vertices.size()) * sizeof(MeshVertex);
     const uint64_t ibSize = uint64_t(meshData.indices.size()) * sizeof(uint32_t);
-    if (vbSize > UINT32_MAX || ibSize > UINT32_MAX)
+    if (vbSize > UINT32_MAX || ibSize > UINT32_MAX) {
         throw std::runtime_error("LoadMesh : Mesh buffer 用的VB IB 溢位UINT32");
+    }
+        
 
     // 建立default buffer
     D3D12_RESOURCE_DESC vbDesc{};   

@@ -44,38 +44,29 @@ void RenderSystem::InitializeViewPortAndScissorRect() {
     scissorRect.bottom      = static_cast<uint32_t>(Common::InitialWindowHeight);
 }
 
-// 很醜 要大修 現在不只texture 還有 mesh   
-/*// 後續改成回傳 texture handle 給Scene 跟下面一樣
-void RenderSystem::LoadTexture() {
+MeshHandle RenderSystem::LoadOceanMesh(const OceanMeshData& meshData) {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
     ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
     ID3D12GraphicsCommandList1* copyList = m_queueManager->GetList(QueueType::Copy);
 
     m_queueManager->BeginCommandRecording(QueueType::Copy, currentFrame);
-
-    //texture
-    //m_textureManager->LoadTexture("asset/texture/poop.png", copyList);
-    //m_textureManager->LoadTexture("asset/texture/waterball.png", copyList);
-    //m_textureManager->LoadTexture("asset/texture/Suck.jpg", copyList);
-
-    //mesh test
-    m_resourceManager->Load2DMesh(copyList);
-    const auto result = m_resourceManager->LoadMesh("asset/model/test.glb", copyList);
-
+    auto handle = m_resourceManager->LoadOceanMesh(meshData, copyList);
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Copy, currentFrame);
     uint64_t waitForCopy = m_queueManager->Signal(QueueType::Copy);
     //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
     m_queueManager->QueueWait(QueueType::Direct, QueueType::Copy, waitForCopy);
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
-
+    m_resourceManager->TransitionMeshBuffer(handle, directList);
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
 
+    // 寫死的全部flush 之後改成動態檢測狀態 任務完成的才沖掉
     m_queueManager->FlushCommandQueue(QueueType::Direct);
 
     m_textureManager->ClearUploadBuffer();
     m_resourceManager->ClearUploadBuffer();
+
+    return handle;
 }
-*/
 
 std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>& objects) {
     uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();

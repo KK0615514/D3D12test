@@ -33,7 +33,7 @@ public:
 	void Render(const SceneRenderData& data);
 	void Shutdown();
 
-	//test
+	MeshHandle LoadOceanMesh(const OceanMeshData& meshData);
 	std::vector<MeshHandle> LoadMeshes(const std::vector<std::string>& objects);
 
 private:
