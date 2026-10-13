@@ -12,21 +12,21 @@
 
 static const uint8_t* GetElement(const tinygltf::Model& model , const tinygltf::Accessor& accessor , size_t i , size_t elementSize){
     if (accessor.bufferView < 0 || i >= accessor.count)
-        throw std::runtime_error("Invalid GLB accessor");
+        throw std::runtime_error("GetElement : Invalid GLB accessor");
 
     const auto& view = model.bufferViews.at(accessor.bufferView);
     const auto& buffer = model.buffers.at(view.buffer);
     const int stride = accessor.ByteStride(view);
 
     if (stride < 0 || static_cast<size_t>(stride) < elementSize)
-        throw std::runtime_error("Invalid GLB accessor stride");
+        throw std::runtime_error("GetElement : Invalid GLB accessor stride");
 
     const size_t offset =
         view.byteOffset + accessor.byteOffset + i * static_cast<size_t>(stride);
 
     if (offset > buffer.data.size() ||
         elementSize > buffer.data.size() - offset)
-        throw std::runtime_error("GLB accessor exceeds buffer");
+        throw std::runtime_error("GetElement : GLB accessor exceeds buffer");
 
     return buffer.data.data() + offset;
 }
@@ -38,7 +38,7 @@ static std::array<float, N> ReadFloats(const tinygltf::Model& model , const tiny
 
     if (accessor.componentType != TINYGLTF_COMPONENT_TYPE_FLOAT ||
         accessor.type != expectedType)
-        throw std::runtime_error("Unsupported GLB vertex format");
+        throw std::runtime_error("ReadFloats : Unsupported GLB vertex format");
 
     std::array<float, N> result{};
     std::memcpy(result.data(),
@@ -49,7 +49,7 @@ static std::array<float, N> ReadFloats(const tinygltf::Model& model , const tiny
 
 static uint32_t ReadIndex(const tinygltf::Model& model , const tinygltf::Accessor& accessor , size_t i) {
     if (accessor.type != TINYGLTF_TYPE_SCALAR)
-        throw std::runtime_error("Invalid GLB index format");
+        throw std::runtime_error("ReadIndex : Invalid GLB index format");
 
     switch (accessor.componentType) {
     case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: {
@@ -68,7 +68,7 @@ static uint32_t ReadIndex(const tinygltf::Model& model , const tinygltf::Accesso
         return value;
     }
     default:
-        throw std::runtime_error("Unsupported GLB index format");
+        throw std::runtime_error("ReadIndex : Unsupported GLB index format");
     }
 }
 
@@ -84,7 +84,7 @@ MeshData LoadGlbMeshData(const char* path)
         OutputDebugStringA(warning.c_str());
     }
     if (!ok) {
-        throw std::runtime_error(error);
+        throw std::runtime_error("LoadGlbMeshData : " + error);
     }
 
     MeshData result;

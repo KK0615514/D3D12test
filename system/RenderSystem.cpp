@@ -11,6 +11,7 @@ void RenderSystem::Init(HWND hwnd) {
 
     m_queueManager = std::make_unique<QueueManager>(m_device);
     m_queueManager->Init();
+
     m_d3d12Engine->InitSwapChain(hwnd, m_queueManager->GetQueue(QueueType::Direct));
     m_d3d12Engine->InitDepthBuffer();
     m_d3d12Engine->InitRootSig();
@@ -19,8 +20,9 @@ void RenderSystem::Init(HWND hwnd) {
     m_resourceManager = std::make_unique<ResourceManager>(m_device);
     m_resourceManager->Init();
 
-	m_textureManager = std::make_unique<TextureManager>(m_device);
-	m_textureManager->Init();
+    auto* textures = m_resourceManager->GetTextureManager();
+    // test 拿heap 生資源
+    m_resourceManager->InitializeOceanHeight();
 
     //預設只有一種rootsig
     m_pipelineManager = std::make_unique<PipelineManager>(m_device, m_rootsig);
@@ -45,45 +47,40 @@ void RenderSystem::InitializeViewPortAndScissorRect() {
 }
 
 MeshHandle RenderSystem::LoadOceanMesh(const OceanMeshData& meshData) {
-    uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
-    ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
-    ID3D12GraphicsCommandList1* copyList = m_queueManager->GetList(QueueType::Copy);
+    auto currentFrame = m_d3d12Engine->GetFrameIndex();
+    auto* meshes = m_resourceManager->GetMeshManager();
+    auto* directList = m_queueManager->GetList(QueueType::Direct);
+    auto* copyList = m_queueManager->GetList(QueueType::Copy);
 
     m_queueManager->BeginCommandRecording(QueueType::Copy, currentFrame);
-    auto handle = m_resourceManager->LoadOceanMesh(meshData, copyList);
+    auto handle = meshes->LoadOceanMesh(meshData, copyList);
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Copy, currentFrame);
     uint64_t waitForCopy = m_queueManager->Signal(QueueType::Copy);
     //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
     m_queueManager->QueueWait(QueueType::Direct, QueueType::Copy, waitForCopy);
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
-    m_resourceManager->TransitionMeshBuffer(handle, directList);
+    meshes->TransitionMeshBuffer(handle, directList);
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
 
     // 寫死的全部flush 之後改成動態檢測狀態 任務完成的才沖掉
     m_queueManager->FlushCommandQueue(QueueType::Direct);
 
-    m_textureManager->ClearUploadBuffer();
-    m_resourceManager->ClearUploadBuffer();
+    meshes->ClearUploadBuffer();
 
     return handle;
 }
 
 std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>& objects) {
-    uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
-    ID3D12GraphicsCommandList1* directList = m_queueManager->GetList(QueueType::Direct);
-    ID3D12GraphicsCommandList1* copyList = m_queueManager->GetList(QueueType::Copy);
+    auto currentFrame = m_d3d12Engine->GetFrameIndex();
+    auto* meshes = m_resourceManager->GetMeshManager();
+    auto* directList = m_queueManager->GetList(QueueType::Direct);
+    auto* copyList = m_queueManager->GetList(QueueType::Copy);
     std::vector<MeshLoadResult> results;  
     results.reserve(objects.size());
 
-    std::vector<std::string> paths;
-    // 把物件名稱擴充成指定路徑 
-    for (auto& object : objects) {
-        paths.emplace_back("asset/model/" + object +".glb");
-    }
-
     m_queueManager->BeginCommandRecording(QueueType::Copy, currentFrame);
-    for (auto path : paths) {
-        results.emplace_back(m_resourceManager->LoadMesh(path.c_str(), copyList));
+    for (auto object : objects) {
+        results.emplace_back(meshes->LoadMesh(object.c_str(), copyList));
     }
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Copy, currentFrame);
     uint64_t waitForCopy = m_queueManager->Signal(QueueType::Copy);
@@ -92,15 +89,14 @@ std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>&
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
     for (const auto& result : results) {
         if (result.newlyCreated)
-            m_resourceManager->TransitionMeshBuffer(result.handle, directList);
+            meshes->TransitionMeshBuffer(result.handle, directList);
     }
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
 
     // 寫死的全部flush 之後改成動態檢測狀態 任務完成的才沖掉
     m_queueManager->FlushCommandQueue(QueueType::Direct);
 
-    m_textureManager->ClearUploadBuffer();
-    m_resourceManager->ClearUploadBuffer();
+    meshes->ClearUploadBuffer();
 
     std::vector<MeshHandle> handles;
     handles.reserve(results.size());
@@ -112,7 +108,7 @@ std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>&
 
 // 現在每幀fence等待是在這裡 之後要修改 不然太醜
 void RenderSystem::Update(const SceneRenderData& data) {
-    uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
+    auto currentFrame = m_d3d12Engine->GetFrameIndex();
 
     // 一幀的開始 啟用direct queue
     m_queueManager->WaitFrameReady(QueueType::Direct, currentFrame);
@@ -123,11 +119,19 @@ void RenderSystem::Update(const SceneRenderData& data) {
 }
 
 void RenderSystem::Render(const SceneRenderData& data) {
-    uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
+    auto currentFrame = m_d3d12Engine->GetFrameIndex();
 
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
 
     BindGlobalRenderResource(currentFrame);
+    //test
+    m_resourceManager->PrepareOceanHeight(
+        m_queueManager->GetList(QueueType::Direct),
+        m_d3d12Engine->GetRootsig(),
+        m_pipelineManager->GetOceanComputePso(),
+        data.oceanWaveParameters
+    );
+
     SetViewAndScissor();
     ClearBackBuffer(currentFrame);
     DrawMeshPass(data);
@@ -140,16 +144,18 @@ void RenderSystem::Render(const SceneRenderData& data) {
 
 // Render流程 - 1 綁定各種資源
 void RenderSystem::BindGlobalRenderResource(uint32_t currentFrame) {
-    ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
+    auto* cmdList = m_queueManager->GetList(QueueType::Direct);
+    auto* descriptors = m_resourceManager->GetDescriptorManager();
+    ID3D12DescriptorHeap* shaderHeap = descriptors->GetShaderHeap();
 
     //指定texture 的 srv 
-    cmdList->SetDescriptorHeaps(1, m_textureManager->m_srvHeap.GetAddressOf());
+    cmdList->SetDescriptorHeaps(1, &shaderHeap);
 
     //每幀綁定root signature
     cmdList->SetGraphicsRootSignature(m_d3d12Engine->GetRootsig());
 
     //設定tex srv as descriptor table
-    D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandle = m_textureManager->m_srvHeap->GetGPUDescriptorHandleForHeapStart();
+    D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandle = descriptors->GetTableStart();
     cmdList->SetGraphicsRootDescriptorTable(
         static_cast<UINT>(RootSlot::TextureTable),
         textureSrvHandle
@@ -166,11 +172,18 @@ void RenderSystem::BindGlobalRenderResource(uint32_t currentFrame) {
         static_cast<UINT>(RootSlot::PerFrameConstant),
         cbvAddress
     );
+
+    // test
+    //------------------------------------------------------------------------------------------------------------------
+    cmdList->SetGraphicsRootDescriptorTable(
+        static_cast<UINT>(RootSlot::OceanHeightTable),
+        m_resourceManager->GetOceanHeightSrv()
+    );
 }
 
 // Render流程 - 2 綁定裁切視窗
 void RenderSystem::SetViewAndScissor() {
-    ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
+    auto* cmdList = m_queueManager->GetList(QueueType::Direct);
 
     //設定視野&裁切範圍
     cmdList->RSSetViewports(1, &screenViewport);
@@ -179,8 +192,8 @@ void RenderSystem::SetViewAndScissor() {
 
 // Render流程 - 3 清除當前幀BackBuffer & 切換Barrier到繪製狀態
 void RenderSystem::ClearBackBuffer(uint32_t currentFrame) {
-    ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
-    ID3D12Resource* pBackBuffer = m_d3d12Engine->GetBackBuffer();
+    auto* cmdList = m_queueManager->GetList(QueueType::Direct);
+    auto* pBackBuffer = m_d3d12Engine->GetBackBuffer();
     const auto dsvHandle = m_d3d12Engine->GetDsvHandle();
 
     //建立Barrier 更改SwapChian當前Buffer的狀態
@@ -217,8 +230,8 @@ void RenderSystem::ClearBackBuffer(uint32_t currentFrame) {
 
 // Render流程 - 4 Mesh Pass       
 void RenderSystem::DrawMeshPass(const SceneRenderData& data) {
-    ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
-
+    auto* cmdList = m_queueManager->GetList(QueueType::Direct);
+    auto* meshes = m_resourceManager->GetMeshManager();
     cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     for (const auto& batch : data.batches) {
         const std::size_t offset = batch.instanceOffset;
@@ -236,7 +249,7 @@ void RenderSystem::DrawMeshPass(const SceneRenderData& data) {
         }
 
         // 無效handle 缺少buffer 則跳過當前batch
-        const auto* meshPtr = m_resourceManager->TryGetMesh(batch.mesh);
+        const auto* meshPtr = meshes->TryGetMesh(batch.mesh);
         if (!meshPtr) {
             continue; 
         }
@@ -257,8 +270,8 @@ void RenderSystem::DrawMeshPass(const SceneRenderData& data) {
 
 // Render流程 - 5 切換Barrier到呈現狀態
 void RenderSystem::TransitionBackBuffer(uint32_t currentFrame) {
-    ID3D12GraphicsCommandList1* cmdList = m_queueManager->GetList(QueueType::Direct);
-    ID3D12Resource* pBackBuffer = m_d3d12Engine->GetBackBuffer();
+    auto* cmdList = m_queueManager->GetList(QueueType::Direct);
+    auto* pBackBuffer = m_d3d12Engine->GetBackBuffer();
     
     //修改Barrier 更改SwapChain當前Buffer的狀態
     D3D12_RESOURCE_BARRIER barrier{};

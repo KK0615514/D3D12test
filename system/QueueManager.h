@@ -1,7 +1,9 @@
 #pragma once
 #include <d3d12.h>
-#include <dxgi1_6.h>
 #include <wrl/client.h> // 使用 ComPtr 來自動管理 D3D12 指針釋放
+
+#include <cstdint>
+#include <cstddef>
 #include <vector>
 #include <array>
 
@@ -45,13 +47,16 @@ public:
 	void BeginCommandRecording(QueueType queue, uint32_t currentFrame);
 	void EndAndExecuteCommandRecording(QueueType queue, uint32_t currentFrame);
 
+	// 幀末fence
 	void WaitFrameReady(QueueType queue, uint32_t currentFrame);
 	void SignalCurrentFrame(QueueType queue, uint32_t currentFrame);
 	void FlushCommandQueue(QueueType queue);
 
+	// 跨queue fence
 	uint64_t Signal(QueueType queue);
 	void QueueWait(QueueType waitingQueue,QueueType sourceQueue,uint64_t fenceValue);
 
+	// getter
 	ID3D12CommandQueue*			GetQueue(QueueType queue) const;
 	ID3D12GraphicsCommandList1*	GetList(QueueType queue) const;
 

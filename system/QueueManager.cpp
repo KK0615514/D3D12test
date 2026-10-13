@@ -1,5 +1,8 @@
 #include "QueueManager.h"
 
+#include <stdexcept>
+#include <string>
+
 CommandQueueContext::~CommandQueueContext() {
     if (fenceEvent) {
         CloseHandle(fenceEvent);
@@ -19,14 +22,15 @@ void QueueManager::InitializeCommandQueue() {
     directQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
     Common::ThrowIfFailed(
         m_device->CreateCommandQueue(&directQueueDesc, IID_PPV_ARGS(&m_commandQueues[0].commandQueue)),
-        "DirectQueue建立失敗"
+        "QueueManager::InitializeCommandQueue : DirectQueue建立失敗"
     );
     Common::ThrowIfFailed(
         m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_commandQueues[0].fence)),
-        "Fence for DirectQueue建立失敗"
+        "QueueManager::InitializeCommandQueue : Fence for DirectQueue建立失敗"
     );
     m_commandQueues[0].fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (!m_commandQueues[0].fenceEvent) throw std::runtime_error("Fence event建立失敗");
+    if (!m_commandQueues[0].fenceEvent) 
+        throw std::runtime_error("QueueManager::InitializeCommandQueue : Fence event建立失敗");
     
     // 建立CopyQueue
     D3D12_COMMAND_QUEUE_DESC copyQueueDesc{};
@@ -34,14 +38,15 @@ void QueueManager::InitializeCommandQueue() {
     copyQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COPY;
     Common::ThrowIfFailed(
         m_device->CreateCommandQueue(&copyQueueDesc, IID_PPV_ARGS(&m_commandQueues[1].commandQueue)),
-        "CopyQueue建立失敗"
+        "QueueManager::InitializeCommandQueue : CopyQueue建立失敗"
     );
     Common::ThrowIfFailed(
         m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_commandQueues[1].fence)),
-        "Fence for CopyQueue建立失敗"
+        "QueueManager::InitializeCommandQueue : Fence for CopyQueue建立失敗"
     );
     m_commandQueues[1].fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (!m_commandQueues[1].fenceEvent) throw std::runtime_error("Fence event建立失敗");
+    if (!m_commandQueues[1].fenceEvent) 
+        throw std::runtime_error("QueueManager::InitializeCommandQueue : Fence event建立失敗");
 
     // 建立ComputeQueue
     D3D12_COMMAND_QUEUE_DESC computeQueueDesc{};
@@ -49,14 +54,15 @@ void QueueManager::InitializeCommandQueue() {
     computeQueueDesc.Type = D3D12_COMMAND_LIST_TYPE_COMPUTE;
     Common::ThrowIfFailed(
         m_device->CreateCommandQueue(&computeQueueDesc, IID_PPV_ARGS(&m_commandQueues[2].commandQueue)),
-        "ComputeQueue建立失敗"
+        "QueueManager::InitializeCommandQueue : ComputeQueue建立失敗"
     );
     Common::ThrowIfFailed(
         m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_commandQueues[2].fence)),
-        "Fence for ComputeQueue建立失敗"
+        "QueueManager::InitializeCommandQueue : Fence for ComputeQueue建立失敗"
     );
     m_commandQueues[2].fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (!m_commandQueues[2].fenceEvent) throw std::runtime_error("Fence event建立失敗");
+    if (!m_commandQueues[2].fenceEvent) 
+        throw std::runtime_error("QueueManager::InitializeCommandQueue : Fence event建立失敗");
 }
 
 void QueueManager::InitializeCommandList() {
@@ -65,12 +71,12 @@ void QueueManager::InitializeCommandList() {
     {
         Common::ThrowIfFailed(
             m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandQueues[0].commandAllocators[i])),
-            "Direct Allocator建立失敗"
+            "QueueManager::InitializeCommandList : Direct Allocator建立失敗"
         );
     }
     Common::ThrowIfFailed(
         m_device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_DIRECT, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&m_commandQueues[0].commandList)),
-        "Direct CommandList建立失敗"
+        "QueueManager::InitializeCommandList : Direct CommandList建立失敗"
     );
 
     // 建立Allocator&List for Copy
@@ -78,12 +84,12 @@ void QueueManager::InitializeCommandList() {
     {
         Common::ThrowIfFailed(
             m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COPY, IID_PPV_ARGS(&m_commandQueues[1].commandAllocators[i])),
-            "Direct Allocator建立失敗"
+            "QueueManager::InitializeCommandList : Copy Allocator建立失敗"
         );
     }
     Common::ThrowIfFailed(
         m_device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_COPY, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&m_commandQueues[1].commandList)),
-        "Direct CommandList建立失敗"
+        "QueueManager::InitializeCommandList : Copy CommandList建立失敗"
     );
 
     // 建立Allocator&List for Compute
@@ -91,12 +97,12 @@ void QueueManager::InitializeCommandList() {
     {
         Common::ThrowIfFailed(
             m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_COMPUTE, IID_PPV_ARGS(&m_commandQueues[2].commandAllocators[i])),
-            "Direct Allocator建立失敗"
+            "QueueManager::InitializeCommandList : Compute Allocator建立失敗"
         );
     }
     Common::ThrowIfFailed(
         m_device->CreateCommandList1(0, D3D12_COMMAND_LIST_TYPE_COMPUTE, D3D12_COMMAND_LIST_FLAG_NONE, IID_PPV_ARGS(&m_commandQueues[2].commandList)),
-        "Direct CommandList建立失敗"
+        "QueueManager::InitializeCommandList : Compute CommandList建立失敗"
     );
 }
 
@@ -107,11 +113,11 @@ void QueueManager::BeginCommandRecording(QueueType queue, uint32_t currentFrame)
 
     Common::ThrowIfFailed(
         currentQueue.commandAllocators[currentFrame]->Reset(),
-        "Allocator重置失敗"
+        "QueueManager::BeginCommandRecording : Allocator重置失敗"
     );  
     Common::ThrowIfFailed(
         currentQueue.commandList->Reset(currentQueue.commandAllocators[currentFrame].Get(), nullptr),
-        "CommandList綁定失敗"
+        "QueueManager::BeginCommandRecording : CommandList綁定失敗"
     );
 }
 
@@ -120,7 +126,7 @@ void QueueManager::EndAndExecuteCommandRecording(QueueType queue, uint32_t curre
 
     Common::ThrowIfFailed(
         currentQueue.commandList->Close(),
-        "CommandList close 失敗"
+        "QueueManager::EndAndExecuteCommandRecording : CommandList close 失敗"
     );
     ID3D12CommandList* cmds[] = { currentQueue.commandList.Get() };
     currentQueue.commandQueue->ExecuteCommandLists(1, cmds);
@@ -136,9 +142,22 @@ void QueueManager::WaitFrameReady(QueueType queue, uint32_t currentFrame) {
     {
         Common::ThrowIfFailed(
             currentQueue.fence->SetEventOnCompletion(fenceToWait, currentQueue.fenceEvent),
-            "SetEventOnCompletion 失敗"
+            "QueueManager::WaitFrameReady : SetEventOnCompletion 失敗"
         );
-        WaitForSingleObject(currentQueue.fenceEvent, INFINITE);
+        const DWORD result = WaitForSingleObject(currentQueue.fenceEvent, INFINITE);
+        if (result == WAIT_FAILED) {
+            const DWORD error = GetLastError();
+            throw std::runtime_error(
+                std::string("QueueManager::WaitFrameReady : Fence 等待失敗，Win32 error=") +
+                std::to_string(error)
+            );
+        }
+        if (result != WAIT_OBJECT_0) {
+            throw std::runtime_error(
+                std::string("QueueManager::WaitFrameReady : 非預期的等待結果，result=") +
+                std::to_string(result)
+            );
+        }
     }
 }
 
@@ -150,7 +169,7 @@ void QueueManager::SignalCurrentFrame(QueueType queue, uint32_t currentFrame) {
     // 送出fence  下幀在等
     Common::ThrowIfFailed(
         currentQueue.commandQueue->Signal(currentQueue.fence.Get(), value),
-        "幀末的fence失效"
+        "QueueManager::SignalCurrentFrame : 幀末的fence失效"
     );
     currentQueue.fenceValues[currentFrame] = value;
 }
@@ -161,14 +180,28 @@ void QueueManager::FlushCommandQueue(QueueType queue) {
     const uint64_t value = currentQueue.currentFenceValue++;
     Common::ThrowIfFailed(
         currentQueue.commandQueue->Signal(currentQueue.fence.Get(), value),
-        "Flush 失敗"
+        "QueueManager::FlushCommandQueue : Flush 失敗"
     );
     if (currentQueue.fence->GetCompletedValue() < value) {
         Common::ThrowIfFailed(
             currentQueue.fence->SetEventOnCompletion(value, currentQueue.fenceEvent),
-            "Fence event設定失敗"
+            "QueueManager::FlushCommandQueue : Fence event設定失敗"
         );
-        WaitForSingleObject(currentQueue.fenceEvent, INFINITE);
+        const DWORD result = WaitForSingleObject(currentQueue.fenceEvent, INFINITE);
+        if (result == WAIT_FAILED) {
+            const DWORD error = GetLastError();
+
+            throw std::runtime_error(
+                std::string("QueueManager::FlushCommandQueue : Fence 等待失敗，Win32 error=") +
+                std::to_string(error)
+            );
+        }
+        if (result != WAIT_OBJECT_0) {
+            throw std::runtime_error(
+                std::string("QueueManager::FlushCommandQueue : 非預期的等待結果，result=") +
+                std::to_string(result)
+            );
+        }
     }
 }
     
@@ -180,7 +213,7 @@ uint64_t QueueManager::Signal(QueueType queue){
 
     Common::ThrowIfFailed(
         context.commandQueue->Signal(context.fence.Get(), value),
-        "Queue signal 失敗"
+        "QueueManager::Signal : Queue signal 失敗"
     );
     return value;
 }
@@ -191,7 +224,7 @@ void QueueManager::QueueWait( QueueType waitingQueue,QueueType sourceQueue,uint6
 
     Common::ThrowIfFailed(
         waiting.commandQueue->Wait(source.fence.Get(), fenceValue),
-        "Queue wait 失敗"
+        "QueueManager::QueueWait : Queue wait 失敗"
     );
 }
 

@@ -1,13 +1,15 @@
 #include "PipelineManager.h"
 
 #include <cstddef>
-//test
-#include "MeshData.h"
+
+#include "system/CommonUtils.h"
+#include "system/MeshData.h"
 
 void PipelineManager::Init() {
 	InitializePSO();
-
 	InitMeshPSO();
+	InitOceanPSO();
+	InitOceanComputePSO();
 }
 
 void PipelineManager::InitializePSO() {
@@ -62,17 +64,28 @@ void PipelineManager::InitializePSO() {
 	psoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
 	psoDesc.SampleDesc.Count = 1;
 
-	m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_psos[static_cast<int>(PsoType::TextureLoader)]));
+	Common::ThrowIfFailed(
+		m_device->CreateGraphicsPipelineState(
+			&psoDesc, 
+			IID_PPV_ARGS(&m_psos[static_cast<int>(PsoType::TextureLoader)])
+		),
+		"PipelineManager::InitializePSO : TextureLoader PSO 建立失敗"
+	);
+	
 }
 
 void PipelineManager::InitMeshPSO() {
 	const D3D12_INPUT_ELEMENT_DESC layout[] = {
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
-		  static_cast<UINT>(offsetof(MeshVertex, position)),
-		  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
-		  static_cast<UINT>(offsetof(MeshVertex, normal)),
-		  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+		{ 
+			"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
+			static_cast<UINT>(offsetof(MeshVertex, position)),
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 
+		},
+		{ 
+			"NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0,
+			static_cast<UINT>(offsetof(MeshVertex, normal)),
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 
+		}
 	};
 	auto vs = Common::LoadBinaryFile(L"shader/test_vs.cso");
 	auto ps = Common::LoadBinaryFile(L"shader/test_ps.cso");
@@ -101,7 +114,62 @@ void PipelineManager::InitMeshPSO() {
 	Common::ThrowIfFailed(
 		m_device->CreateGraphicsPipelineState(
 			&desc, IID_PPV_ARGS(&m_psos[static_cast<size_t>(PsoType::MeshDebug)])),
-		"MeshDebug PSO failed"
+		"PipelineManager::InitMeshPSO : Mesh PSO 建立失敗"
+	);
+}
+
+// test
+void PipelineManager::InitOceanPSO() {
+	const D3D12_INPUT_ELEMENT_DESC layout[] = {
+		{
+			"POSITION", 0,DXGI_FORMAT_R32G32_FLOAT,0,
+			static_cast<UINT>(offsetof(OceanVertex, positionXZ)),
+			D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,0
+		}
+	};
+	auto vs = Common::LoadBinaryFile(L"shader/Ocean_vs.cso");
+	auto ps = Common::LoadBinaryFile(L"shader/Ocean_ps.cso");
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = m_rootSignature.Get();
+	desc.InputLayout = { layout, _countof(layout) };
+	desc.VS = { vs.data(), vs.size() };
+	desc.PS = { ps.data(), ps.size() };
+
+	desc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;		//D3D12_FILL_MODE_SOLID		D3D12_FILL_MODE_WIREFRAME 
+	desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	desc.RasterizerState.DepthClipEnable = TRUE;
+	desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	desc.DepthStencilState.DepthEnable = TRUE;
+	desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+	desc.DepthStencilState.StencilEnable = FALSE;
+	desc.SampleMask = UINT_MAX;
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.NumRenderTargets = 1;
+	desc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+	desc.SampleDesc.Count = 1;
+
+	Common::ThrowIfFailed(
+		m_device->CreateGraphicsPipelineState(
+			&desc,
+			IID_PPV_ARGS(&m_psos[static_cast<size_t>(PsoType::Ocean)])),
+		"PipelineManager::InitOceanPSO : Ocean PSO 建立失敗"
+	);
+}
+void PipelineManager::InitOceanComputePSO() {
+	auto cs = Common::LoadBinaryFile(L"shader/OceanHeightCompute_cs.cso");
+
+	D3D12_COMPUTE_PIPELINE_STATE_DESC desc{};
+	desc.pRootSignature = m_rootSignature.Get();
+	desc.CS = { cs.data(), cs.size() };
+
+	Common::ThrowIfFailed(
+		m_device->CreateComputePipelineState(
+			&desc,
+			IID_PPV_ARGS(&m_oceanComputePso)),
+		"PipelineManager::InitOceanComputePSO : Ocean Compute PSO 建立失敗"
 	);
 }
 

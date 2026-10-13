@@ -9,6 +9,15 @@ struct PerFrameConstant {
 	float padding;							//  4 bytes
 };
 
+// test
+struct OceanWaveParameters {
+	float Time = 0.0f;
+	float Amplitude = 15.0f;
+	float AngularSpeed = 1.0f;
+	float Padding = 0.0f;
+};
+static_assert(sizeof(OceanWaveParameters) == 16);
+
 struct PerViewConstant {
 
 };

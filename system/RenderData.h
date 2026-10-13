@@ -17,6 +17,7 @@ struct RenderBatch {
 };
 
 struct SceneRenderData {
+    OceanWaveParameters oceanWaveParameters{};      //test
     PerFrameConstant cameraData{};
     std::vector<InstanceData> instanceDatas;
     std::vector<RenderBatch> batches;

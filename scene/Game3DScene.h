@@ -1,9 +1,6 @@
 #pragma once
-#include <DirectXMath.h>
-
 #include "IScene.h"
 
-#include "system/CommonUtils.h"
 #include "system/Random.h"
 #include "system/RenderData.h"
 #include "system/MeshData.h"
@@ -14,6 +11,13 @@ public:
 	Game3DScene(GameContext& ctx);
 	~Game3DScene() = default;
 
+	// 資源載入
+	void SetMeshes(std::vector<MeshHandle> meshes) override;
+	const SceneRenderData& GetRenderData() const override;
+	void SetOceanMesh(MeshHandle handle) override;
+	const OceanMeshData& GetOceanMeshData() const override;
+
+	// 常規函式
 	void Update() override;
 
 	//test
@@ -21,14 +25,10 @@ public:
 	void MoveSystem();
 	void SpwanAndMoveEnemy();
 	void RotateCamera();
+
+	void BuildOceanRenderData();	//test 海生成
 	//test
 
-	void SetMeshes(std::vector<MeshHandle> meshes) override;
-	const SceneRenderData& GetRenderData() const override;
-
-	void SetOceanMesh(MeshHandle handle) override;
-	const OceanMeshData& GetOceanMeshData() const override;
-	
 private:
 	OceanMeshData m_oceanMeshData;		//細分好的物件
 

@@ -19,11 +19,15 @@ add_executable(ECS
 
     # 核心D3D12物件 & Window設定
     "system/Window.cpp" 
+
     "system/RenderSystem.cpp"   
-    "system/D3D12Engine.cpp"
-    "system/QueueManager.cpp"  
-    "system/ResourceManager.cpp"
-    "system/PipelineManager.cpp"  
+        "system/D3D12Engine.cpp"
+        "system/QueueManager.cpp"  
+        "system/ResourceManager.cpp"
+            "system/DescriptorManager.cpp"
+            "system/MeshManager.cpp"
+            "system/TextureManager.cpp" 
+        "system/PipelineManager.cpp"  
 
     # 其他系統物件
     "system/GlbLoader.cpp"
@@ -35,10 +39,11 @@ add_executable(ECS
 
     # Entt System
     "ecs_system/CameraSystem.cpp"
-
-    #可刪除 placedresoource實作以前不動 
-    "system/TextureManager.h"          "system/TextureManager.cpp"       
 )
+
+target_compile_definitions(ECS PRIVATE
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN)
 
 #release設定下 關閉cmd窗口
 set_property(TARGET ECS PROPERTY WIN32_EXECUTABLE $<CONFIG:Release>)
@@ -87,26 +92,41 @@ set(ALL_CSO_OUTPUTS "")
 # 遍歷所有HLSL & 編譯
 foreach(SHADER_PATH ${HLSL_FILES})
     # 取純檔名
-    get_filename_component(SHADER_NAME ${SHADER_PATH} NAME_WE)
+    get_filename_component(SHADER_NAME "${SHADER_PATH}" NAME_WE)
+    # 名稱以 Compute 結尾的檔案 編譯為 Compute Shader。
+    if(SHADER_NAME MATCHES "Compute$")
+        set(CS_OUT "${CSO_OUT_DIR}/${SHADER_NAME}_cs.cso")
+        add_custom_command(
+            OUTPUT "${CS_OUT}"
+            COMMAND dxc.exe -E CSMain -T cs_6_0 -Fo "${CS_OUT}" "${SHADER_PATH}"
+            DEPENDS "${SHADER_PATH}"
+            COMMENT "編譯 Compute Shader: ${SHADER_NAME}"
+            VERBATIM
+        )
+        list(APPEND ALL_CSO_OUTPUTS "${CS_OUT}")
+        continue()
+    endif()
     # 定義路徑 & 名稱
     set(VS_OUT "${CSO_OUT_DIR}/${SHADER_NAME}_vs.cso")
     set(PS_OUT "${CSO_OUT_DIR}/${SHADER_NAME}_ps.cso")
     # 使用dxc 在cmd 編譯VS
     add_custom_command(
-        OUTPUT ${VS_OUT}
-        COMMAND dxc.exe -E VSMain -T vs_6_0 -Fo ${VS_OUT} ${SHADER_PATH}
-        DEPENDS ${SHADER_PATH}
+        OUTPUT "${VS_OUT}"
+        COMMAND dxc.exe -E VSMain -T vs_6_0 -Fo "${VS_OUT}" "${SHADER_PATH}"
+        DEPENDS "${SHADER_PATH}"
         COMMENT "自動編譯頂點著色器: ${SHADER_NAME} (VSMain -> vs_6_0)"
+        VERBATIM
     )
     # 使用dxc 在cmd 編譯PS
     add_custom_command(
-        OUTPUT ${PS_OUT}
-        COMMAND dxc.exe -E PSMain -T ps_6_0 -Fo ${PS_OUT} ${SHADER_PATH}
-        DEPENDS ${SHADER_PATH}
+        OUTPUT "${PS_OUT}"
+        COMMAND dxc.exe -E PSMain -T ps_6_0 -Fo "${PS_OUT}" "${SHADER_PATH}"
+        DEPENDS "${SHADER_PATH}"
         COMMENT "自動編譯像素著色器: ${SHADER_NAME} (PSMain -> ps_6_0)"
+        VERBATIM
     )
     #存取所有編譯好的 .cso
-    list(APPEND ALL_CSO_OUTPUTS ${VS_OUT} ${PS_OUT})
+    list(APPEND ALL_CSO_OUTPUTS "${VS_OUT}" "${PS_OUT}")
 endforeach()
 # 批量綁定所有 .cso
 target_sources(ECS PRIVATE ${ALL_CSO_OUTPUTS})

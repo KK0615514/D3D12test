@@ -1,30 +1,37 @@
 #include "Game3DScene.h"
 
+#include <DirectXMath.h>
 #include <cstddef>
 #include <stdexcept>
 
+#include "system/CommonUtils.h"
 #include "system/OceanMeshGenerator.h"
 
 Game3DScene::Game3DScene(GameContext& ctx) :IScene(ctx)
 {
     // 初始化時建立 IFFT用 海洋細分Mesh
-    m_oceanMeshData = Ocean::GenerateOceanMesh(100.0f, 100.0f, 64, 64);
+    m_oceanMeshData = Ocean::GenerateOceanMesh(500.0f, 500.0f, 320, 320);   //100 64 目前沒chunk才用那麼大  
 
     m_camera = m_registry.create();
     m_registry.emplace<Transform>(m_camera);
     m_registry.emplace<Camera>(m_camera);
+    auto& cameraTransform = m_registry.get<Transform>(m_camera);
+    cameraTransform.position = { 0.0f, 20.0f, -30.0f };
+    cameraTransform.SetRotationEuler(30.0f, 0.0f, 0.0f);
 
     //m_registry.emplace<Transform>(m_player);
 }
 
 void Game3DScene::Update() {
 
-    //RotateCamera();
+    m_renderData.oceanWaveParameters.Time += m_ctx.m_timer.GetDeltaTime();
+
+    RotateCamera();
     MoveSystem();
     UpdateCamera();
 
     SpwanAndMoveEnemy();
-
+    BuildOceanRenderData();
 }
 
 
@@ -98,7 +105,7 @@ void Game3DScene::MoveSystem() {
     );
 
     if (forwardInput != 0.0f || rightInput != 0.0f) {
-        // 正規化，避免 W+D 斜向移動比較快
+        // 正規化 避免 W+D 斜向移動比較快
         direction = DirectX::XMVector3Normalize(direction);
 
         auto position = DirectX::XMLoadFloat3(&transform.position);
@@ -124,7 +131,7 @@ void Game3DScene::RotateCamera() {
     // 剛開始拖曳，只記錄位置，避免視角跳動
     if (!m_cameraDragging) {
         m_lastMouseX = mouseX;
-        m_lastMouseY = mouseY;
+        m_lastMouseY = mouseY;  
         m_cameraDragging = true;
         return;
     }
@@ -163,13 +170,13 @@ void Game3DScene::RotateCamera() {
     DirectX::XMStoreFloat4(&transform.rotation, rotation);
 }
 
-// test 加減生怪
+// test  加減生怪
 void Game3DScene::SpwanAndMoveEnemy() {
     m_renderData.instanceDatas.clear();
     m_renderData.batches.clear();
     auto delta = m_ctx.m_timer.GetDeltaTime();
     //亂寫生怪
-    for (int i = 1;i <= 20;i++)
+    for (int i = 1;i <= 1;i++)
     {
         float rx = Xoshiro128::Random() - 0.5f;
         float ry = Xoshiro128::Random() - 0.5f;
@@ -186,15 +193,15 @@ void Game3DScene::SpwanAndMoveEnemy() {
         m_registry.emplace<Lifetime>(monkey, 10.0f);
     }
 
-    ////亂寫移動
-    //auto moveview = m_registry.view<Transform, Speed>();
-    //for (auto&& [entity, transform, speed] : moveview.each()) {
-    //    transform = moveview.get<Transform>(entity);
-    //    speed = moveview.get<Speed>(entity);
-    //    transform.position.x += speed.x * delta;
-    //    transform.position.y += speed.y * delta;
-    //    transform.position.z += speed.z * delta;
-    //}
+    //亂寫移動
+    auto moveview = m_registry.view<Transform, Speed>();
+    for (auto&& [entity, transform, speed] : moveview.each()) {
+        transform = moveview.get<Transform>(entity);
+        speed = moveview.get<Speed>(entity);
+        transform.position.x += speed.x * delta;
+        transform.position.y += speed.y * delta;
+        transform.position.z += speed.z * delta;
+    }
 
     // 複製貼上 存活確認
     std::vector<entt::entity> expired;
@@ -275,6 +282,34 @@ void Game3DScene::SpwanAndMoveEnemy() {
     }
 }
 
+// test  嘗試生成海 AI
+void Game3DScene::BuildOceanRenderData() {
+    const auto ocean = m_meshes.find("Ocean");
+    if (ocean == m_meshes.end()) {
+        return;
+    }
+
+    const uint32_t instanceOffset =
+        static_cast<uint32_t>(m_renderData.instanceDatas.size());
+
+    InstanceData instance{};
+
+    // 單位矩陣：不縮放、不旋轉，保持原本 100 × 100 的尺寸。
+    DirectX::XMStoreFloat4x4(
+        &instance.Transform,
+        DirectX::XMMatrixTranspose(DirectX::XMMatrixIdentity())
+    );
+
+    m_renderData.instanceDatas.push_back(instance);
+
+    m_renderData.batches.push_back(RenderBatch{
+        .pso = PsoType::Ocean,
+        .mesh = ocean->second,
+        .instanceOffset = instanceOffset,
+        .instanceCount = 1
+        });
+}
+
 
 
 void Game3DScene::SetOceanMesh(MeshHandle handle) {
@@ -288,13 +323,15 @@ const OceanMeshData& Game3DScene::GetOceanMeshData() const {
 void Game3DScene::SetMeshes(std::vector<MeshHandle> meshes) {
     // 檢查參數合不合規
     if (test.size() != meshes.size()) {
-        throw std::invalid_argument("SetMeshes : GPU回傳handle數量對不上 載入時的meshes數量");
+        throw std::invalid_argument("Game3DScene::SetMeshes : GPU回傳handle數量對不上 載入時的meshes數量");
     }
 
     for (size_t i = 0; i < test.size(); ++i) {
         m_meshes.insert_or_assign(test[i], meshes[i]);
     }
 }
+
+
 
 const SceneRenderData& Game3DScene::GetRenderData() const {
     return m_renderData;

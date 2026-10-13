@@ -3,6 +3,8 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h> // 使用 ComPtr 來自動管理 D3D12 指針釋放
 
+#include <cstdint>
+
 #include "system/CommonUtils.h"
 
 using Microsoft::WRL::ComPtr;

@@ -1,10 +1,4 @@
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>    //前面兩個ifndef 再瘦身windows
+#include <windows.h>    // NOMINMAX , WIN32_LEAN_AND_MEAN 移動到cmake去宣告 可以減少Window.h部分不常用的 API
 #include <tchar.h>
 #include <iostream>
 
@@ -22,7 +16,7 @@ int main(int argc, char* argv[]) {
     HINSTANCE hInstance = GetModuleHandle(NULL);
     HWND hwnd = CreateNativeWindow(windowWidth, windowHeight, hInstance);
     if (!hwnd) {
-        std::cerr << "視窗建立失敗！" << std::endl;
+        std::cerr << "main : 視窗建立失敗" << std::endl;
         return -1;
     }
 

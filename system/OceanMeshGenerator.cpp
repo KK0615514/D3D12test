@@ -1,12 +1,15 @@
 #include "system/OceanMeshGenerator.h"
 
+#include <cmath>
+#include <stdexcept>
+
 OceanMeshData Ocean::GenerateOceanMesh(float width, float depth, uint32_t cellsX, uint32_t cellsZ) {
     // 檢查參數是否合規
     if (!std::isfinite(width) || !std::isfinite(depth) ||width <= 0.0f || depth <= 0.0f){
-        throw std::invalid_argument("GenerateOceanMesh: 非法的 width 與 depth 值");
+        throw std::invalid_argument("Ocean::GenerateOceanMesh : 非法的 width 與 depth 值");
     }
     if (cellsX == 0 || cellsZ == 0){
-        throw std::invalid_argument("GenerateOceanMesh: 細分數量要大於0");
+        throw std::invalid_argument("Ocean::GenerateOceanMesh : 細分數量要大於0");
     }
 
     const uint64_t columns = uint64_t(cellsX) + 1;
@@ -16,7 +19,7 @@ OceanMeshData Ocean::GenerateOceanMesh(float width, float depth, uint32_t cellsX
     const uint64_t maxVertices = UINT32_MAX / sizeof(OceanVertex);
     const uint64_t maxIndices = UINT32_MAX / sizeof(uint32_t);
     if (columns > maxVertices / rows    ||     uint64_t(cellsX) > (maxIndices / 6) / cellsZ){
-        throw std::overflow_error("GenerateOceanMesh: 超出buffer的最大上限");
+        throw std::overflow_error("Ocean::GenerateOceanMesh : 超出buffer的最大上限");
     }
 
     const uint64_t vertexCount = columns * rows;

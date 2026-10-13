@@ -1,15 +1,11 @@
 #pragma once
 #include <d3d12.h>
-#include <dxgi1_6.h>
 #include <wrl/client.h> // 使用 ComPtr 來自動管理 D3D12 指針釋放
-#include <DirectXMath.h>
+
 #include <array>
+#include <cstddef>
 
-#include "system/CommonUtils.h"
 #include "system/PsoType.h"
-
-//test
-#include "MeshData.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -18,9 +14,22 @@ public:
 	PipelineManager() = delete;
 	PipelineManager(ID3D12Device4* device , ID3D12RootSignature* rootSignature)
 		: m_device(device) , m_rootSignature(rootSignature){};
+	~PipelineManager() = default;
 
 	void Init();
 	ID3D12PipelineState* GetPso(PsoType type) const;
+
+
+
+public:			// AI copy paste
+	ID3D12PipelineState* GetOceanComputePso() const {
+		return m_oceanComputePso.Get();
+	}
+private:		// AI copy paste
+	ComPtr<ID3D12PipelineState> m_oceanComputePso;
+	void InitOceanComputePSO();
+
+
 
 private:
 	ComPtr<ID3D12Device4>															m_device;
@@ -30,5 +39,6 @@ private:
 	std::array<ComPtr<ID3D12PipelineState> , PsoCount>	m_psos;
 
 	void InitializePSO();
-	void InitMeshPSO();		//test
+	void InitMeshPSO();		
+	void InitOceanPSO();
 };

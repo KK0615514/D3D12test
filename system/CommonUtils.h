@@ -1,14 +1,8 @@
 #pragma once
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN 
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <Windows.h>	// 前面兩個ifndef 再瘦身windows
+#include <Windows.h>	// NOMINMAX , WIN32_LEAN_AND_MEAN 移動到cmake去宣告 可以減少Window.h部分不常用的 API
 #include <stdexcept>	// runtime_error
 
+#include <cstdint>
 #include <vector>			//LoadBinaryFile
 #include <fstream>			//LoadBinaryFile
 #include <string>			//LoadBinaryFile
@@ -22,41 +16,51 @@ namespace Common {
 	//雙緩衝
 	inline constexpr uint32_t BackBufferCount = 2;
 
-	inline void ThrowIfFailed(HRESULT hr, const char text[])
-	{
+	inline void ThrowIfFailed(HRESULT hr, const char text[]){
 		if (FAILED(hr))
 		{
 			throw std::runtime_error(text);
 		}
 	}
 
-	inline std::vector<char> LoadBinaryFile(const std::wstring& filename) {
-		// 以「二進位(ios::binary)」且「直接移到檔案末尾(ios::ate)」的方式開啟檔案
-		std::ifstream file(filename, std::ios::binary | std::ios::ate);
+    inline std::vector<char> LoadBinaryFile(const std::wstring& filename){
+        std::ifstream file(
+            filename,
+            std::ios::binary | std::ios::ate
+        );
 
-		if (!file.is_open())
-		{
-			// 檔案開啟失敗（可能是路徑錯了，或是忘記把 .cso 複製到執行檔路徑）
-			// 實務上可以在這裡跳出錯誤訊息
-			return {};
-		}
+        if (!file.is_open()) {
+            throw std::runtime_error(
+                "Common::LoadBinaryFile : 檔案開啟失敗"
+            );
+        }
 
-		// 因為開啟時直接移到了檔案末尾，tellg() 剛好就是整份檔案的總大小（位元組）
-		std::streamsize size = file.tellg();
+        const std::streamsize size = file.tellg();
 
-		// 根據檔案大小，開闢對應容量的陣列空間
-		std::vector<char> buffer(size);
+        if (size < 0) {
+            throw std::runtime_error(
+                "Common::LoadBinaryFile : 檔案大小取得失敗"
+            );
+        }
+        if (size == 0) {
+            throw std::runtime_error(
+                "Common::LoadBinaryFile : 檔案為空"
+            );
+        }
 
-		// 將檔案讀取指針移回最開頭，準備讀取數據
-		file.seekg(0, std::ios::beg);
+        std::vector<char> buffer(static_cast<size_t>(size));
 
-		// 一口氣把整份檔案的二進位數據讀入我們的 buffer 陣列中
-		if (file.read(buffer.data(), size))
-		{
-			return buffer;
-		}
+        if (!file.seekg(0, std::ios::beg)) {
+            throw std::runtime_error(
+                "Common::LoadBinaryFile : 檔案讀取位置設定失敗"
+            );
+        }
+        if (!file.read(buffer.data(), size)) {
+            throw std::runtime_error(
+                "Common::LoadBinaryFile : 檔案讀取失敗"
+            );
+        }
 
-		return {};
-	}
-
+        return buffer;
+    }
 }

@@ -1,43 +1,20 @@
 #pragma once
 #include <d3d12.h>
-#include <dxgi1_6.h>
 #include <wrl/client.h>			// 使用 ComPtr 來自動管理 D3D12 指針釋放
-#include <DirectXMath.h>
 	
-#include <string>				// 實作asset path cache
-#include <cstring>				// 使用std::memcpy
-#include <unordered_map>		// 實作asset path cache
+#include <cstdint>				// uint16_t等
+#include <memory>				
+
+#include "system/TextureManager.h"
+#include "system/MeshManager.h"
+#include "system/DescriptorManager.h"
 
 #include "system/CommonUtils.h"
-#include "system/MeshData.h"
-
-#include "system/RenderHandle.h"
 
 #include "ecs_component/ShaderStructureBuffer.h"
 #include "ecs_component/ShaderConstantBuffer.h"
 
 using Microsoft::WRL::ComPtr;
-
-// 物件資料
-struct MeshGpuResource {
-	ComPtr<ID3D12Resource> vertexBuffer;
-	ComPtr<ID3D12Resource> indexBuffer;
-
-	ComPtr<ID3D12Resource> vertexUploadBuffer;
-	ComPtr<ID3D12Resource> indexUploadBuffer;
-
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
-	D3D12_INDEX_BUFFER_VIEW indexBufferView{};
-
-	uint32_t indexCount = 0;
-	uint32_t vertexCount = 0;
-};
-
-// 檢查mesh是否是新載入的
-struct MeshLoadResult {
-	MeshHandle handle;
-	bool newlyCreated;
-};
 
 // 向前宣告 渲染單子 
 struct SceneRenderData;
@@ -51,7 +28,7 @@ public:
 
 	//cb sb之後改place再說 現在先這樣
 	//constant buffer 
-	static const uint32_t				MaxCBVsPerFrame = 3;						//每個Frame最多幾個cbv
+	static const uint32_t				MaxCBVsPerFrame = 3;							//每個Frame最多幾個cbv
 	ComPtr<ID3D12Resource>				m_constantBuffer[FrameCount][MaxCBVsPerFrame];
 	void* m_cbvCpuAdress[FrameCount][MaxCBVsPerFrame] = { nullptr };
 
@@ -67,19 +44,35 @@ public:
 	void Init();
 	void Update(const SceneRenderData& data, uint32_t currentFrame);
 
-	MeshLoadResult LoadMesh(const char* path, ID3D12GraphicsCommandList1* m_commandList);
-	void TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* m_commandList);
-	void ClearUploadBuffer();
+	DescriptorManager*	GetDescriptorManager();
+	MeshManager*		GetMeshManager();
+	TextureManager*		GetTextureManager();
+	
 
-	const MeshGpuResource* TryGetMesh(MeshHandle handle) const;	//採用指標 方便檢測 因為可以nullptr回傳
+public:			// AI copy paste
+	static constexpr uint32_t OceanHeightResolution = 256;
+	void InitializeOceanHeight();
+	void PrepareOceanHeight(
+		ID3D12GraphicsCommandList1* directList,
+		ID3D12RootSignature* computeRootSignature,
+		ID3D12PipelineState* computePso,
+		const OceanWaveParameters& parameters);
 
-	// test
-	MeshHandle LoadOceanMesh(const OceanMeshData& meshData, ID3D12GraphicsCommandList1* copyList);
+	D3D12_GPU_DESCRIPTOR_HANDLE GetOceanHeightSrv() const {
+		return m_oceanHeightSrv;
+	}
+private:		// AI copy paste
+	ComPtr<ID3D12Resource> m_oceanHeight;
+
+	D3D12_GPU_DESCRIPTOR_HANDLE m_oceanHeightSrv{};
+	D3D12_GPU_DESCRIPTOR_HANDLE m_oceanHeightUav{};
 
 private:
 	ComPtr<ID3D12Device4>			m_device;
-	std::vector<MeshGpuResource>	m_meshes;
-	std::unordered_map<std::string, MeshHandle> m_meshCache;
+
+	std::unique_ptr<DescriptorManager>	m_descriptorManager;
+	std::unique_ptr<MeshManager>		m_meshManager;
+	std::unique_ptr<TextureManager>		m_textureManager;
 
 	void InitializeConstantBuffer();
 	void InitializeStructureBuffer();

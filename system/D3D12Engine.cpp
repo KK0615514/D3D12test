@@ -15,14 +15,14 @@ void D3D12Engine::InitDevice() {
     // 傳入DXGI_CREATE_FACTORY_DEBUG 配合CreateFactory增加基礎結構除錯
     Common::ThrowIfFailed(
         CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&m_factory)),
-        "Factory建立失敗"
+        "D3D12Engine::InitDevice : Factory建立失敗"
     );
 
 #else
     // Release版本 不啟用Debug層
     Common::ThrowIfFailed(
         CreateDXGIFactory2(0, IID_PPV_ARGS(&m_factory)), 
-        "Factory建立失敗"
+        "D3D12Engine::InitDevice : Factory建立失敗"
     );
 
 #endif
@@ -30,12 +30,12 @@ void D3D12Engine::InitDevice() {
     // 建立Adapter 選顯卡
     Common::ThrowIfFailed(
         m_factory->EnumAdapterByGpuPreference(0,DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE,IID_PPV_ARGS(&m_adapter)),
-        "Adapter建立失敗"
+        "D3D12Engine::InitDevice : Adapter建立失敗"
     );
     // 建立Device
     Common::ThrowIfFailed(
         D3D12CreateDevice(m_adapter.Get(),D3D_FEATURE_LEVEL_11_0,IID_PPV_ARGS(&m_device)),
-        "Device建立失敗"
+        "D3D12Engine::InitDevice : Device建立失敗"
     );
 
 }
@@ -58,9 +58,12 @@ void D3D12Engine::InitSwapChain(HWND hwnd, ID3D12CommandQueue* Queue){
     ComPtr<IDXGISwapChain1> swapChain;
     Common::ThrowIfFailed(
         m_factory->CreateSwapChainForHwnd(Queue, hwnd, &swapChainDesc, nullptr, nullptr, &swapChain),
-        "轉換用SwapChain建立失敗"
+        "D3D12Engine::InitSwapChain : 轉換用SwapChain建立失敗"
     );
-    swapChain.As(&m_swapChain);
+    Common::ThrowIfFailed(
+        swapChain.As(&m_swapChain),
+        "D3D12Engine::InitSwapChain : SwapChain 介面轉換失敗"
+    );
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 
     // 建立RTV Descriptor Heap (地址串)
@@ -70,7 +73,7 @@ void D3D12Engine::InitSwapChain(HWND hwnd, ID3D12CommandQueue* Queue){
     rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     Common::ThrowIfFailed(
         m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)),
-        "RTV Descriptor Heap建立失敗"
+        "D3D12Engine::InitSwapChain : RTV Descriptor Heap建立失敗"
     );
     m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);   //取得顯卡的rtv大小
 
@@ -83,7 +86,7 @@ void D3D12Engine::InitSwapChain(HWND hwnd, ID3D12CommandQueue* Queue){
                 i,
                 IID_PPV_ARGS(&m_renderTargets[i])
             ),
-            "Swapchain GetBuffer建立失敗"
+            "D3D12Engine::InitSwapChain : Swapchain GetBuffer建立失敗"
         );
 
         m_device->CreateRenderTargetView(m_renderTargets[i].Get(), nullptr, rtvHandle);
@@ -95,18 +98,18 @@ void D3D12Engine::InitRootSig() {
     //slot的規格 & 設定descriptor的範圍		可以用vector來一次上傳多個descriptor
     D3D12_DESCRIPTOR_RANGE1 texRange{};
     texRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    texRange.NumDescriptors = UINT_MAX;                          // 設定 1 我必須使用for迴圈重複計算offset跟綁定資源 設定最大上限 即可在HLSL裡面使用內建index抓圖 
-    texRange.BaseShaderRegister = 0;                        // t0 space0
+    texRange.NumDescriptors = UINT_MAX;                             // 設定 1 我必須使用for迴圈重複計算offset跟綁定資源 設定最大上限 即可在HLSL裡面使用內建index抓圖 
+    texRange.BaseShaderRegister = 0;                                // t0 space0
     texRange.RegisterSpace = 0;
     texRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;		//自動補齊 不用手動 算offset
     //test
     texRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
 
     //建立 root slot 參數
-    D3D12_ROOT_PARAMETER1 rootParameter[4]{};
+    D3D12_ROOT_PARAMETER1 rootParameter[7]{};
     //slot0 : texture srv 
     rootParameter[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-    rootParameter[0].DescriptorTable.NumDescriptorRanges = 1;      // t0,space0          包含一個Range 也就是一個descriptor heap
+    rootParameter[0].DescriptorTable.NumDescriptorRanges = 1;       // t0,space0          包含一個Range 也就是一個descriptor heap
     rootParameter[0].DescriptorTable.pDescriptorRanges = &texRange;
     rootParameter[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // 圖片通常只在 Pixel Shader 使用
     //slot1 : sb srv
@@ -125,6 +128,45 @@ void D3D12Engine::InitRootSig() {
     rootParameter[3].Constants.RegisterSpace = 0;
     rootParameter[3].Constants.Num32BitValues = 1;
     rootParameter[3].ShaderVisibility =D3D12_SHADER_VISIBILITY_VERTEX;
+
+    //--------------------------------------------------------------------------------------------------------------------
+    // slot4 test FFT海
+    D3D12_DESCRIPTOR_RANGE1 oceanHeightRange{};
+    oceanHeightRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    oceanHeightRange.NumDescriptors = 1;
+    oceanHeightRange.BaseShaderRegister = 0;
+    oceanHeightRange.RegisterSpace = 2;
+    oceanHeightRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
+    oceanHeightRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    rootParameter[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameter[4].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameter[4].DescriptorTable.pDescriptorRanges = &oceanHeightRange;
+    rootParameter[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+
+    // Slot 5：Compute 寫入高度圖，u0 space2。
+    D3D12_DESCRIPTOR_RANGE1 oceanUavRange{};
+    oceanUavRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
+    oceanUavRange.NumDescriptors = 1;
+    oceanUavRange.BaseShaderRegister = 0;
+    oceanUavRange.RegisterSpace = 2;
+    oceanUavRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DATA_VOLATILE;
+    oceanUavRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+    rootParameter[5].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameter[5].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameter[5].DescriptorTable.pDescriptorRanges = &oceanUavRange;
+    rootParameter[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
+    // Slot 6：波浪參數，b2 space0。
+    // b0、b1 已經被原本的相機與 instance offset 使用。
+    rootParameter[6].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+    rootParameter[6].Constants.ShaderRegister = 2;
+    rootParameter[6].Constants.RegisterSpace = 0;
+    rootParameter[6].Constants.Num32BitValues = 4;
+    rootParameter[6].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+    //--------------------------------------------------------------------------------------------------------------------
+
 
     // 定義static sampler desc for root signature
     D3D12_STATIC_SAMPLER_DESC imageSampler{};
@@ -146,12 +188,28 @@ void D3D12Engine::InitRootSig() {
     imageSampler.RegisterSpace = 0;
     imageSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL; // 僅像素著色器可見
 
+    // test
+    //--------------------------------------------------------------------------------------------------------------------
+    D3D12_STATIC_SAMPLER_DESC oceanSampler = imageSampler;
+    oceanSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    oceanSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    oceanSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    oceanSampler.ShaderRegister = 0;
+    oceanSampler.RegisterSpace = 2;
+    oceanSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+    D3D12_STATIC_SAMPLER_DESC samplers[] = {
+        imageSampler,
+        oceanSampler
+    };
+    //--------------------------------------------------------------------------------------------------------------------
+
+
     // 綁定至root signature desc	只顯示圖片 所以只有一個srv+sampler
     D3D12_ROOT_SIGNATURE_DESC1 rootSigDesc{};
-    rootSigDesc.NumParameters = 4;
+    rootSigDesc.NumParameters = _countof(rootParameter);
     rootSigDesc.pParameters = rootParameter;
-    rootSigDesc.NumStaticSamplers = 1;
-    rootSigDesc.pStaticSamplers = &imageSampler; // 帶入靜態採樣器 首位址
+    rootSigDesc.NumStaticSamplers = _countof(samplers);
+    rootSigDesc.pStaticSamplers = samplers;     // 帶入靜態採樣器 首位址
     rootSigDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
     D3D12_VERSIONED_ROOT_SIGNATURE_DESC versionedDesc{};
@@ -163,7 +221,7 @@ void D3D12Engine::InitRootSig() {
 
     Common::ThrowIfFailed(
         D3D12SerializeVersionedRootSignature(&versionedDesc,&signatureBlob,&errorBlob),
-        "Root Signature序列化失敗"
+        "D3D12Engine::InitRootSig : Root Signature序列化失敗"
     );
     Common::ThrowIfFailed(
         m_device->CreateRootSignature(
@@ -172,7 +230,7 @@ void D3D12Engine::InitRootSig() {
             signatureBlob->GetBufferSize(),
             IID_PPV_ARGS(&m_rootSignature)
         ),
-        "Rootsig建立失敗"
+        "D3D12Engine::InitRootSig : Rootsig建立失敗"
     );
 }
 
@@ -188,7 +246,7 @@ void D3D12Engine::InitDepthBuffer() {
             &heapDesc,
             IID_PPV_ARGS(&m_dsvHeap)
         ),
-        "DSV heap建立失敗"
+        "D3D12Engine::InitDepthBuffer : DSV heap建立失敗"
     );
 
     D3D12_HEAP_PROPERTIES heapProps{};
@@ -221,7 +279,7 @@ void D3D12Engine::InitDepthBuffer() {
             &clearValue,
             IID_PPV_ARGS(&m_depthBuffer)
         ),
-        "Depth buffer creation failed"
+        "D3D12Engine::InitDepthBuffer : Depth buffer 建立失敗"
     );
 
     D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
@@ -249,7 +307,7 @@ void D3D12Engine::Shutdown() {
 void D3D12Engine::UpdateSwapChainBackBufferIndex() {
     Common::ThrowIfFailed(
         m_swapChain->Present(0, 0),
-        "Swapchain Present 失敗"
+        "D3D12Engine::UpdateSwapChainBackBufferIndex : Swapchain Present 失敗"
     );
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 }
