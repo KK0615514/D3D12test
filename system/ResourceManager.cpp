@@ -6,6 +6,9 @@
 #include "system/RenderData.h"
 
 void ResourceManager::Init() {
+    m_heapManager = std::make_unique<HeapManager>(m_device.Get());
+    m_heapManager->Init();
+
     m_descriptorManager     = std::make_unique<DescriptorManager>(m_device.Get());
     m_descriptorManager->Init();
 
@@ -141,111 +144,12 @@ void ResourceManager::UpdateInstanceSB(const SceneRenderData& data, uint32_t cur
 }
 
 
-
-// test 拿DescriptorManager的 heap 然後在上面生資源
-void ResourceManager::InitializeOceanHeight() {
-    if (!m_descriptorManager) {
-        throw std::logic_error("ResourceManager::InitializeOceanHeight : 未持有Descriptor Manager");
-    }
-
-    const auto srvSlot = m_descriptorManager->Allocate();
-    const auto uavSlot = m_descriptorManager->Allocate();
-
-    m_oceanHeightSrv = srvSlot.gpu;
-    m_oceanHeightUav = uavSlot.gpu;
-
-    // R32_FLOAT：每個 texel 儲存一個有正負值的高度。
-    D3D12_RESOURCE_DESC desc{};
-    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.Width = OceanHeightResolution;
-    desc.Height = OceanHeightResolution;
-    desc.DepthOrArraySize = 1;
-    desc.MipLevels = 1;
-    desc.Format = DXGI_FORMAT_R32_FLOAT;
-    desc.SampleDesc.Count = 1;
-    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
-
-    D3D12_HEAP_PROPERTIES heapProps{};
-    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-    Common::ThrowIfFailed(
-        m_device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &desc,
-            D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-            nullptr,
-            IID_PPV_ARGS(&m_oceanHeight)
-        ),
-        "ResourceManager::InitializeOceanHeight : Ocean height texture 建立失敗"
-    );
-
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-    srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
-    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srvDesc.Texture2D.MipLevels = 1;
-
-    m_device->CreateShaderResourceView(
-        m_oceanHeight.Get(),
-        &srvDesc,
-        srvSlot.cpu
-    );
-
-
-    D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
-    uavDesc.Format = DXGI_FORMAT_R32_FLOAT;
-    uavDesc.ViewDimension = D3D12_UAV_DIMENSION_TEXTURE2D;
-
-    m_device->CreateUnorderedAccessView(
-        m_oceanHeight.Get(),
-        nullptr,
-        &uavDesc,
-        uavSlot.cpu
-    );
+HeapManager* ResourceManager::GetHeapManager() {
+    return m_heapManager.get();
 }
-void ResourceManager::PrepareOceanHeight(
-    ID3D12GraphicsCommandList1* directList,
-    ID3D12RootSignature* computeRootSignature,
-    ID3D12PipelineState* computePso,
-    const OceanWaveParameters& parameters)
-{
-    // SRV 讀取 → UAV 寫入
-    D3D12_RESOURCE_BARRIER barrier{};
-    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    barrier.Transition.pResource = m_oceanHeight.Get();
-    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
 
-    directList->ResourceBarrier(1, &barrier);
-
-    directList->SetComputeRootSignature(computeRootSignature);
-    directList->SetPipelineState(computePso);
-
-    directList->SetComputeRootDescriptorTable(
-        5,
-        m_oceanHeightUav
-    );
-
-    directList->SetComputeRoot32BitConstants(
-        6,
-        4,
-        &parameters,
-        0
-    );
-
-    // HLSL 每組有 8 × 8 個 threads。
-    const uint32_t groupCount = (OceanHeightResolution + 7) / 8;
-
-    directList->Dispatch(groupCount, groupCount, 1);
-
-    // UAV 寫入 → Vertex Shader SRV 讀取
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-
-    directList->ResourceBarrier(1, &barrier);
+DescriptorManager* ResourceManager::GetDescriptorManager() {
+    return m_descriptorManager.get();
 }
 
 MeshManager* ResourceManager::GetMeshManager() {
@@ -254,8 +158,4 @@ MeshManager* ResourceManager::GetMeshManager() {
 
 TextureManager* ResourceManager::GetTextureManager() {
     return m_textureManager.get();
-}
-
-DescriptorManager* ResourceManager::GetDescriptorManager() {
-    return m_descriptorManager.get();
 }

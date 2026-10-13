@@ -350,17 +350,17 @@ MeshLoadResult MeshManager::LoadMesh(const char* name, ID3D12GraphicsCommandList
     return MeshLoadResult{ handle,true };
 }
 
-void MeshManager::TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* directList) {
+void MeshManager::TransitionMeshBuffers(MeshHandle handle, ID3D12GraphicsCommandList1* directList) {
     // 檢查是否是Direct Queue
     if (!directList ||  directList->GetType() != D3D12_COMMAND_LIST_TYPE_DIRECT){
-        throw std::invalid_argument("MeshManager::TransitionMeshBuffer : 需要有效的 Direct CommandList");
+        throw std::invalid_argument("MeshManager::TransitionMeshBuffers : 需要有效的 Direct CommandList");
     }
 
     const MeshGpuResource* meshPtr = TryGetMesh(handle);
 
     if (!meshPtr) {
         throw std::runtime_error(
-            "MeshManager::TransitionMeshBuffer : 錯誤的handle或是buffer"
+            "MeshManager::TransitionMeshBuffers : 錯誤的handle或是buffer"
         );
     }
 
@@ -384,12 +384,14 @@ void MeshManager::TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandL
 
 }
 
-void MeshManager::ClearUploadBuffer() {
+void MeshManager::ClearUploadBuffers() {
     for (auto& mesh : m_meshes) {
         mesh.indexUploadBuffer.Reset();
         mesh.vertexUploadBuffer.Reset();
     }
 }
+
+
 
 const MeshGpuResource* MeshManager::TryGetMesh(MeshHandle handle) const {
     // 檢查handle是否超出邊界

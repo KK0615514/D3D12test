@@ -50,6 +50,8 @@ DescriptorSlot DescriptorManager::Allocate() {
     return slot;
 }
 
+
+
 ID3D12DescriptorHeap* DescriptorManager::GetShaderHeap() const {
     return m_shaderHeap.Get();
 }

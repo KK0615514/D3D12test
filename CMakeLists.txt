@@ -24,6 +24,7 @@ add_executable(ECS
         "system/D3D12Engine.cpp"
         "system/QueueManager.cpp"  
         "system/ResourceManager.cpp"
+            "system/HeapManager.cpp"
             "system/DescriptorManager.cpp"
             "system/MeshManager.cpp"
             "system/TextureManager.cpp" 

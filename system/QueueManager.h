@@ -68,6 +68,6 @@ private:
 	static constexpr size_t QueueCount = static_cast<size_t>(QueueType::Count);
 	std::array<CommandQueueContext, QueueCount> m_commandQueues;
 
-	void InitializeCommandQueue();
-	void InitializeCommandList();
+	void InitCommandQueue();
+	void InitCommandList();
 };

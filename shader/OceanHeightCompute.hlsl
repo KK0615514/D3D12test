@@ -15,8 +15,7 @@ void CSMain(uint3 id : SV_DispatchThreadID)
     uint height;
     gOceanHeight.GetDimensions(width, height);
 
-    if (id.x >= width || id.y >= height)
-    {
+    if (id.x >= width || id.y >= height){
         return;
     }
 

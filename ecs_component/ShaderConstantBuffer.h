@@ -9,7 +9,7 @@ struct PerFrameConstant {
 	float padding;							//  4 bytes
 };
 
-// test
+// 以後bindless 丟cbv 現在是root constant
 struct OceanWaveParameters {
 	float Time = 0.0f;
 	float Amplitude = 15.0f;

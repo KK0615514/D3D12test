@@ -12,7 +12,7 @@
 
 using Microsoft::WRL::ComPtr;
 
-// 物件資料(含CPU)
+// 物件資料(含CPU Handle)
 struct TextureGpuResource {
 	ComPtr<ID3D12Resource> resource;
 	D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON;
@@ -27,6 +27,8 @@ struct TextureLoadResult {
 	bool newlyCreated;
 };
 
+
+
 class TextureManager{
 public:
 	TextureManager() = delete;
@@ -37,11 +39,14 @@ public:
 	TextureLoadResult LoadTexture(const char* name, ID3D12GraphicsCommandList1* m_commandList);
 	TextureHandle CreateTexture2D(
 		const std::string& name, const D3D12_RESOURCE_DESC& desc, D3D12_RESOURCE_STATES initialState, bool createUav = false);
-	void ClearUploadBuffer();
+	void ClearUploadBuffers();
 
+	void TransitionTexture(TextureHandle handle, ID3D12GraphicsCommandList1* directList, D3D12_RESOURCE_STATES targetState);
+	void UavBarrier(TextureHandle handle, ID3D12GraphicsCommandList1* directList);
+
+	uint32_t GetSrvIndex(TextureHandle handle) const;
 	const TextureGpuResource* TryGetTexture(TextureHandle handle) const;
 	const TextureGpuResource* TryGetTexture(const std::string& name) const;
-	uint32_t GetSrvIndex(TextureHandle handle) const;
 
 private:
 	ComPtr<ID3D12Device4>		m_device;
@@ -54,4 +59,6 @@ private:
 
 	TextureGpuResource  BuildTexture2D(const D3D12_RESOURCE_DESC& desc, D3D12_RESOURCE_STATES initialState, bool createUav);
 	TextureHandle RegisterTexture(const std::string& name, TextureGpuResource&& data);
+
+	static void RecordTransition(TextureGpuResource& texture, ID3D12GraphicsCommandList1* directList, D3D12_RESOURCE_STATES targetState);
 };

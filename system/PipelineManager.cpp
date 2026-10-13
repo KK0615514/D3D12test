@@ -136,7 +136,7 @@ void PipelineManager::InitOceanPSO() {
 	desc.VS = { vs.data(), vs.size() };
 	desc.PS = { ps.data(), ps.size() };
 
-	desc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;		//D3D12_FILL_MODE_SOLID		D3D12_FILL_MODE_WIREFRAME 
+	desc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;		//D3D12_FILL_MODE_SOLID		D3D12_FILL_MODE_WIREFRAME 
 	desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	desc.RasterizerState.DepthClipEnable = TRUE;
 	desc.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;

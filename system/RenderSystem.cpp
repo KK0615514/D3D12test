@@ -1,6 +1,7 @@
 #include "RenderSystem.h"
 
 #include <cstddef>
+#include <stdexcept>
 
 #include "system/RenderData.h"
 
@@ -20,19 +21,17 @@ void RenderSystem::Init(HWND hwnd) {
     m_resourceManager = std::make_unique<ResourceManager>(m_device);
     m_resourceManager->Init();
 
-    auto* textures = m_resourceManager->GetTextureManager();
-    // test 拿heap 生資源
-    m_resourceManager->InitializeOceanHeight();
-
     //預設只有一種rootsig
     m_pipelineManager = std::make_unique<PipelineManager>(m_device, m_rootsig);
     m_pipelineManager->Init();
 
-    InitializeViewPortAndScissorRect();
+    InitViewPortAndScissorRect();
+
+    InitOceanHeight();
 }
 
 // 之後隨著視窗變形 或是想要啥鏡頭效果會需要提供 set這兩項的功能
-void RenderSystem::InitializeViewPortAndScissorRect() {
+void RenderSystem::InitViewPortAndScissorRect() {
     screenViewport.TopLeftX = 0.0f;
     screenViewport.TopLeftY = 0.0f;
     screenViewport.Width    = Common::InitialWindowWidth;
@@ -46,6 +45,9 @@ void RenderSystem::InitializeViewPortAndScissorRect() {
     scissorRect.bottom      = static_cast<uint32_t>(Common::InitialWindowHeight);
 }
 
+
+
+// 資源載入
 MeshHandle RenderSystem::LoadOceanMesh(const OceanMeshData& meshData) {
     auto currentFrame = m_d3d12Engine->GetFrameIndex();
     auto* meshes = m_resourceManager->GetMeshManager();
@@ -59,13 +61,13 @@ MeshHandle RenderSystem::LoadOceanMesh(const OceanMeshData& meshData) {
     //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
     m_queueManager->QueueWait(QueueType::Direct, QueueType::Copy, waitForCopy);
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
-    meshes->TransitionMeshBuffer(handle, directList);
+    meshes->TransitionMeshBuffers(handle, directList);
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
 
     // 寫死的全部flush 之後改成動態檢測狀態 任務完成的才沖掉
     m_queueManager->FlushCommandQueue(QueueType::Direct);
 
-    meshes->ClearUploadBuffer();
+    meshes->ClearUploadBuffers();
 
     return handle;
 }
@@ -89,14 +91,14 @@ std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>&
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
     for (const auto& result : results) {
         if (result.newlyCreated)
-            meshes->TransitionMeshBuffer(result.handle, directList);
+            meshes->TransitionMeshBuffers(result.handle, directList);
     }
     m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
 
     // 寫死的全部flush 之後改成動態檢測狀態 任務完成的才沖掉
     m_queueManager->FlushCommandQueue(QueueType::Direct);
 
-    meshes->ClearUploadBuffer();
+    meshes->ClearUploadBuffers();
 
     std::vector<MeshHandle> handles;
     handles.reserve(results.size());
@@ -105,6 +107,8 @@ std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>&
     }
     return handles;
 }
+
+
 
 // 現在每幀fence等待是在這裡 之後要修改 不然太醜
 void RenderSystem::Update(const SceneRenderData& data) {
@@ -124,13 +128,8 @@ void RenderSystem::Render(const SceneRenderData& data) {
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
 
     BindGlobalRenderResource(currentFrame);
-    //test
-    m_resourceManager->PrepareOceanHeight(
-        m_queueManager->GetList(QueueType::Direct),
-        m_d3d12Engine->GetRootsig(),
-        m_pipelineManager->GetOceanComputePso(),
-        data.oceanWaveParameters
-    );
+    // test 畫海
+    PrepareOceanHeight(data.oceanWaveParameters);
 
     SetViewAndScissor();
     ClearBackBuffer(currentFrame);
@@ -141,6 +140,15 @@ void RenderSystem::Render(const SceneRenderData& data) {
     m_queueManager->SignalCurrentFrame(QueueType::Direct, currentFrame);
     m_d3d12Engine->UpdateSwapChainBackBufferIndex();    // 呈現畫面&直接切換frame 不在這裡等signal 等下次輪換到這個frame時在另一個函式確認完成與否
 }
+
+// 主迴圈最後釋放資源
+void RenderSystem::Shutdown() {
+    m_queueManager->FlushCommandQueue(QueueType::Copy);
+    m_queueManager->FlushCommandQueue(QueueType::Compute);
+    m_queueManager->FlushCommandQueue(QueueType::Direct);
+}
+
+
 
 // Render流程 - 1 綁定各種資源
 void RenderSystem::BindGlobalRenderResource(uint32_t currentFrame) {
@@ -175,9 +183,14 @@ void RenderSystem::BindGlobalRenderResource(uint32_t currentFrame) {
 
     // test
     //------------------------------------------------------------------------------------------------------------------
+    const auto* height =m_resourceManager->GetTextureManager()->TryGetTexture(m_oceanHeight);
+    if (!height || height->srv.index == UINT32_MAX) {
+        throw std::logic_error("RenderSystem::BindGlobalRenderResource : 高度圖不存在或缺少 SRV");
+    }
+
     cmdList->SetGraphicsRootDescriptorTable(
         static_cast<UINT>(RootSlot::OceanHeightTable),
-        m_resourceManager->GetOceanHeightSrv()
+        height->srv.gpu
     );
 }
 
@@ -282,9 +295,79 @@ void RenderSystem::TransitionBackBuffer(uint32_t currentFrame) {
     cmdList->ResourceBarrier(1, &barrier);
 }
 
-// 主迴圈最後釋放資源
-void RenderSystem::Shutdown() {
-    m_queueManager->FlushCommandQueue(QueueType::Copy);
-    m_queueManager->FlushCommandQueue(QueueType::Compute);
-    m_queueManager->FlushCommandQueue(QueueType::Direct);
+
+
+// Ocean Pass
+void RenderSystem::InitOceanHeight() {
+    auto* textures = m_resourceManager->GetTextureManager();
+
+    D3D12_RESOURCE_DESC desc{};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = OceanHeightResolution;
+    desc.Height = OceanHeightResolution;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_R32_FLOAT;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+    m_oceanHeight = textures->CreateTexture2D(
+        "OceanHeight",
+        desc,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
+        true
+    );
+}
+
+void RenderSystem::PrepareOceanHeight(const OceanWaveParameters& parameters)
+{
+    auto* textures = m_resourceManager->GetTextureManager();
+    auto* directList = m_queueManager->GetList(QueueType::Direct);
+
+    const auto* height = textures->TryGetTexture(m_oceanHeight);
+    if (!height || !height->hasUav) {
+        throw std::logic_error("RenderSystem::PrepareOceanHeight : 高度圖不存在或缺少 UAV");
+    }
+
+    // 目前固定流程：每次開始與結束都處於 NON_PIXEL_SHADER_RESOURCE。
+    textures->TransitionTexture(
+        m_oceanHeight,
+        directList,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS
+    );
+
+    directList->SetComputeRootSignature(
+        m_d3d12Engine->GetRootsig()
+    );
+
+    directList->SetPipelineState(
+        m_pipelineManager->GetOceanComputePso()
+    );
+
+    directList->SetComputeRootDescriptorTable(
+        static_cast<UINT>(RootSlot::OceanHeightUav),
+        height->uav.gpu
+    );
+
+    static_assert(
+        sizeof(OceanWaveParameters) == 4 * sizeof(uint32_t),
+        "OceanWaveParameters must match four root constants"
+        );
+    directList->SetComputeRoot32BitConstants(
+        static_cast<UINT>(RootSlot::OceanWaveParameters),
+        4,
+        &parameters,
+        0
+    );
+
+    // 目前 HLSL 的 numthreads 為 8 × 8。
+    const uint32_t groupCount =(OceanHeightResolution + 7) / 8;
+    directList->Dispatch(groupCount, groupCount, 1);
+
+    textures->TransitionTexture(
+        m_oceanHeight,
+        directList,
+        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE
+    );
 }

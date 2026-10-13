@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <cstdint>
 
 #include "system/D3D12Engine.h"
 #include "system/QueueManager.h"
@@ -25,10 +26,10 @@ public:
 	RenderSystem() = default;
 	~RenderSystem() = default;
 
-	RenderSystem (const RenderSystem&) = delete;
+	RenderSystem(const RenderSystem&) = delete;
 	RenderSystem(RenderSystem&&) = delete;
-	RenderSystem operator=(const RenderSystem&) = delete;
-	RenderSystem operator=(RenderSystem&&) = delete;
+	RenderSystem& operator=(const RenderSystem&) = delete;
+	RenderSystem& operator=(RenderSystem&&) = delete;
 
 	void Init(HWND hwnd);
 	void Update(const SceneRenderData& data);
@@ -48,14 +49,17 @@ private:
 	 D3D12_VIEWPORT						screenViewport{};
 	 D3D12_RECT							scissorRect{};
 
-	 void InitializeViewPortAndScissorRect();
-	 void LoadTexture();
+	 void InitViewPortAndScissorRect();
 
 	 void ClearBackBuffer(uint32_t currentFrame);
 	 void BindGlobalRenderResource(uint32_t currentFrame);
 	 void SetViewAndScissor();
-	 void DrawTexturePass(const SceneRenderData& data);
-
 	 void DrawMeshPass(const SceneRenderData& data);
 	 void TransitionBackBuffer(uint32_t currentFrame);
+
+private:	// Ocean Pass
+	static constexpr uint32_t OceanHeightResolution = 256;
+	TextureHandle m_oceanHeight{ UINT32_MAX };
+	void InitOceanHeight();
+	void PrepareOceanHeight(const OceanWaveParameters& parameters);
 };

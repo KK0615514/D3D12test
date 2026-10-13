@@ -5,9 +5,10 @@
 #include <cstdint>				// uint16_t等
 #include <memory>				
 
-#include "system/TextureManager.h"
-#include "system/MeshManager.h"
+#include "system/HeapManager.h"
 #include "system/DescriptorManager.h"
+#include "system/MeshManager.h"
+#include "system/TextureManager.h"
 
 #include "system/CommonUtils.h"
 
@@ -21,6 +22,8 @@ struct SceneRenderData;
 
 //目前全部CommitResource
 class ResourceManager {
+
+
 
 //改成placedbuffer後清理下面的public
 public:
@@ -44,32 +47,15 @@ public:
 	void Init();
 	void Update(const SceneRenderData& data, uint32_t currentFrame);
 
+	HeapManager*		GetHeapManager();
 	DescriptorManager*	GetDescriptorManager();
 	MeshManager*		GetMeshManager();
 	TextureManager*		GetTextureManager();
-	
-
-public:			// AI copy paste
-	static constexpr uint32_t OceanHeightResolution = 256;
-	void InitializeOceanHeight();
-	void PrepareOceanHeight(
-		ID3D12GraphicsCommandList1* directList,
-		ID3D12RootSignature* computeRootSignature,
-		ID3D12PipelineState* computePso,
-		const OceanWaveParameters& parameters);
-
-	D3D12_GPU_DESCRIPTOR_HANDLE GetOceanHeightSrv() const {
-		return m_oceanHeightSrv;
-	}
-private:		// AI copy paste
-	ComPtr<ID3D12Resource> m_oceanHeight;
-
-	D3D12_GPU_DESCRIPTOR_HANDLE m_oceanHeightSrv{};
-	D3D12_GPU_DESCRIPTOR_HANDLE m_oceanHeightUav{};
 
 private:
 	ComPtr<ID3D12Device4>			m_device;
 
+	std::unique_ptr<HeapManager>		m_heapManager;
 	std::unique_ptr<DescriptorManager>	m_descriptorManager;
 	std::unique_ptr<MeshManager>		m_meshManager;
 	std::unique_ptr<TextureManager>		m_textureManager;

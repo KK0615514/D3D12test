@@ -10,6 +10,7 @@
 
 #include "system/CommonUtils.h"
 
+// 載入圖片多出 建立Upload Buffer還有複製的步驟
 TextureLoadResult TextureManager::LoadTexture(const char* name, ID3D12GraphicsCommandList1* commandList)
 {
 	// 檢查名稱
@@ -23,11 +24,9 @@ TextureLoadResult TextureManager::LoadTexture(const char* name, ID3D12GraphicsCo
 
 	const std::string key = name;
 	const auto cachedHandle = m_textureCache.find(key);
-
 	if (cachedHandle != m_textureCache.end()) {
 		return TextureLoadResult{ cachedHandle->second, false};
 	}
-
 	const std::string path = "asset/texture/" + key + ".png";
 
 	int w, h, channel;
@@ -147,17 +146,11 @@ TextureLoadResult TextureManager::LoadTexture(const char* name, ID3D12GraphicsCo
 	commandList->CopyTextureRegion(&target, 0, 0, 0, &source, nullptr);
 
 	//切換texture resource狀態 從copy_dest -> shader resource
-	D3D12_RESOURCE_BARRIER barrier{};
-	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrier.Transition.pResource = texture;
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE; // 轉為 Shader 可讀
-	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-
-	//還沒用fence確認完成沒 不能release
-	commandList->ResourceBarrier(1, &barrier);
-
-	texData.state = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+	RecordTransition(
+		texData,
+		commandList,
+		D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE
+	);
 
 	const TextureHandle handle = RegisterTexture(key, std::move(texData));
 
@@ -172,6 +165,74 @@ TextureHandle TextureManager::CreateTexture2D(const std::string& name, const D3D
 	auto data = BuildTexture2D(desc, initialState, createUav);
 	return RegisterTexture(name, std::move(data));
 }
+
+void TextureManager::ClearUploadBuffers() {
+	m_pendingUploadBuffers.clear();
+}
+
+
+
+// UAV不是用Trasition
+void TextureManager::UavBarrier(TextureHandle handle, ID3D12GraphicsCommandList1* directList){
+	if (!directList ||directList->GetType() != D3D12_COMMAND_LIST_TYPE_DIRECT){
+		throw std::invalid_argument("TextureManager::UavBarrier : 需要有效的 Direct CommandList");
+	}
+	if (handle.id >= m_textures.size()) {
+		throw std::out_of_range("TextureManager::UavBarrier : 無效 Handle");
+	}
+
+	const auto& texture = m_textures[handle.id];
+	if (!texture.resource ||texture.state != D3D12_RESOURCE_STATE_UNORDERED_ACCESS){
+		throw std::logic_error("TextureManager::UavBarrier : Resource 不存在或不處於 UAV 狀態");
+	}
+
+	D3D12_RESOURCE_BARRIER barrier{};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+	barrier.UAV.pResource = texture.resource.Get();
+
+	directList->ResourceBarrier(1, &barrier);
+}
+
+// 切換Transition Barrier的外部入口
+void TextureManager::TransitionTexture(TextureHandle handle, ID3D12GraphicsCommandList1* directList, D3D12_RESOURCE_STATES targetState) {
+	if (handle.id >= m_textures.size()) {
+		throw std::out_of_range("TextureManager::TransitionTexture : 無效 Handle");
+	}
+
+	RecordTransition(
+		m_textures[handle.id],
+		directList,
+		targetState
+	);
+}
+
+// 切換Transition Barrier的內部入口
+void TextureManager::RecordTransition(TextureGpuResource& texture, ID3D12GraphicsCommandList1* directList, D3D12_RESOURCE_STATES targetState)
+{
+	if (!directList || directList->GetType() != D3D12_COMMAND_LIST_TYPE_DIRECT){
+		throw std::invalid_argument("TextureManager::RecordTransition : 需要有效的 Direct CommandList");
+	}
+	if (!texture.resource) {
+		throw std::logic_error("TextureManager::RecordTransition : Resource 不存在");
+	}
+	if (texture.state == targetState) {
+		return;
+	}
+
+	D3D12_RESOURCE_BARRIER barrier{};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Transition.pResource = texture.resource.Get();
+	barrier.Transition.Subresource =D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+	barrier.Transition.StateBefore = texture.state;
+	barrier.Transition.StateAfter = targetState;
+
+	directList->ResourceBarrier(1, &barrier);
+
+	// 更新已錄製指令後預期的狀態，不表示 GPU 已執行完成。
+	texture.state = targetState;
+}
+
+
 
 TextureGpuResource  TextureManager::BuildTexture2D(const D3D12_RESOURCE_DESC& desc, D3D12_RESOURCE_STATES initialState, bool createUav) {
 	if (!m_device || !m_descriptors) {
@@ -276,11 +337,17 @@ TextureHandle TextureManager::RegisterTexture(const std::string& name, TextureGp
 	return handle;
 }
 
-void TextureManager::ClearUploadBuffer() {
-	m_pendingUploadBuffers.clear();
+
+
+uint32_t TextureManager::GetSrvIndex(TextureHandle handle) const {
+	const auto* data = TryGetTexture(handle);
+
+	if (!data || data->srv.index == UINT32_MAX) {
+		throw std::out_of_range("TextureManager::GetSrvIndex : 無效 Handle 或缺少 SRV");
+	}
+
+	return data->srv.index;
 }
-
-
 
 const TextureGpuResource* TextureManager::TryGetTexture(TextureHandle handle) const{
 	if (handle.id >= m_textures.size()) {
@@ -304,14 +371,4 @@ const TextureGpuResource* TextureManager::TryGetTexture(const std::string& name)
 	}
 
 	return TryGetTexture(found->second);
-}
-
-uint32_t TextureManager::GetSrvIndex(TextureHandle handle) const {
-	const auto* data = TryGetTexture(handle);
-
-	if (!data || data->srv.index == UINT32_MAX) {
-		throw std::out_of_range("TextureManager::GetSrvIndex : 無效 Handle 或缺少 SRV");
-	}
-
-	return data->srv.index;
 }

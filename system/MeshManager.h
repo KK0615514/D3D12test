@@ -40,8 +40,8 @@ public:
 
     MeshHandle LoadOceanMesh(const OceanMeshData& meshData, ID3D12GraphicsCommandList1* copyList);
     MeshLoadResult LoadMesh(const char* name, ID3D12GraphicsCommandList1* copyList);
-    void TransitionMeshBuffer(MeshHandle handle, ID3D12GraphicsCommandList1* directList);
-    void ClearUploadBuffer();
+    void TransitionMeshBuffers(MeshHandle handle, ID3D12GraphicsCommandList1* directList);
+    void ClearUploadBuffers();
 
     const MeshGpuResource* TryGetMesh(MeshHandle handle) const;     //採用指標 方便檢測 因為可以nullptr回傳
 

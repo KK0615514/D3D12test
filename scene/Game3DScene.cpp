@@ -69,7 +69,7 @@ void Game3DScene::UpdateCamera() {
 void Game3DScene::MoveSystem() {
 
     auto delta = m_ctx.m_timer.GetDeltaTime();
-    const float speed = 12.0f;
+    const float speed = 40.0f;
     auto& transform = m_registry.get<Transform>(m_camera);
     
     const auto rotation = DirectX::XMQuaternionNormalize(
