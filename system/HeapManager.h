@@ -1,5 +1,6 @@
 #pragma once
 #include <d3d12.h>
+#include <dxgi1_6.h>
 #include <wrl/client.h>
 
 #include <cstdint>
@@ -27,7 +28,8 @@ struct HeapBlock {
 
 class HeapManager {
 public:
-    HeapManager(ID3D12Device4* device): m_device(device) {}
+    HeapManager(ID3D12Device4* device, IDXGIAdapter4* adapter):
+        m_device(device), m_adapter(adapter) {}
     ~HeapManager() = default;
 
     HeapManager (const HeapManager&) = delete;
@@ -42,9 +44,12 @@ public:
     HeapAllocation Allocate(const D3D12_RESOURCE_DESC& desc, D3D12_HEAP_TYPE type);
 
     ID3D12Heap* GetHeap(uint32_t heapId) const;
+    DXGI_QUERY_VIDEO_MEMORY_INFO GetVideoMemoryInfo(
+        DXGI_MEMORY_SEGMENT_GROUP group =DXGI_MEMORY_SEGMENT_GROUP_LOCAL) const;
 
 private:
     ComPtr<ID3D12Device4> m_device;
+    ComPtr<IDXGIAdapter4> m_adapter;
 
     // 所有配置池的實體 heap，heapId 是這個集合的索引。
     std::vector<HeapBlock> m_heaps;

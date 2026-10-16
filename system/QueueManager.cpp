@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 CommandQueueContext::~CommandQueueContext() {
     if (fenceEvent) {
@@ -230,10 +231,191 @@ void QueueManager::QueueWait( QueueType waitingQueue,QueueType sourceQueue,uint6
 
 
 
+ID3D12GraphicsCommandList1* QueueManager::BeginUploadRecording(QueueType queue) {
+    if (queue != QueueType::Copy && queue != QueueType::Direct) {
+        throw std::invalid_argument("QueueManager::BeginUploadRecording : 僅支援 Copy 或 Direct");
+    }
+
+    auto& context = m_commandQueues[static_cast<size_t>(queue)];
+    if (context.activeUploadContext != UINT32_MAX) {
+        throw std::logic_error("QueueManager::BeginUploadRecording : 已有進行中的錄製");
+    }
+
+    const uint64_t completed = GetCompletedFenceValue(queue);
+
+    uint32_t selected = UINT32_MAX;
+
+    for (std::size_t i = 0; i < context.uploadContexts.size(); ++i) {
+        const auto& item = context.uploadContexts[i];
+
+        if (item.retireFenceValue != UINT64_MAX && item.retireFenceValue <= completed) {
+            selected = static_cast<uint32_t>(i);
+            break;
+        }
+    }
+
+    const D3D12_COMMAND_LIST_TYPE type =
+        queue == QueueType::Copy
+        ? D3D12_COMMAND_LIST_TYPE_COPY
+        : D3D12_COMMAND_LIST_TYPE_DIRECT;
+
+    if (selected == UINT32_MAX) {
+        if (context.uploadContexts.size() >= UINT32_MAX) {
+            throw std::overflow_error("QueueManager::BeginUploadRecording : Context 數量超出上限");
+        }
+
+        UploadCommandContext item{};
+
+        Common::ThrowIfFailed(
+            m_device->CreateCommandAllocator(
+                type,
+                IID_PPV_ARGS(&item.allocator)
+            ),
+            "QueueManager::BeginUploadRecording : Upload allocator 建立失敗"
+        );
+
+        selected = static_cast<uint32_t>(context.uploadContexts.size());
+
+        context.uploadContexts.push_back(std::move(item));
+    }
+
+    // 後續準備失敗時，呼叫端可以取消這個 context。
+    context.activeUploadContext = selected;
+
+    auto& item = context.uploadContexts[selected];
+
+    // 被取消的 list 會釋放；下次使用時重新建立。
+    if (!item.commandList) {
+        Common::ThrowIfFailed(
+            m_device->CreateCommandList1(
+                0,
+                type,
+                D3D12_COMMAND_LIST_FLAG_NONE,
+                IID_PPV_ARGS(&item.commandList)
+            ),
+            "QueueManager::BeginUploadRecording : Upload command list 建立失敗"
+        );
+    }
+
+    Common::ThrowIfFailed(
+        item.allocator->Reset(),
+        "QueueManager::BeginUploadRecording : Upload allocator 重設失敗"
+    );
+
+    Common::ThrowIfFailed(
+        item.commandList->Reset(item.allocator.Get(), nullptr),
+        "QueueManager::BeginUploadRecording : Upload command list 重設失敗"
+    );
+
+    item.retireFenceValue = 0;
+    item.isClosed = false;
+
+    return item.commandList.Get();
+}
+
+void QueueManager::CloseUploadRecording(QueueType queue) {
+    if (queue != QueueType::Copy && queue != QueueType::Direct) {
+        throw std::invalid_argument("QueueManager::CloseUploadRecording : 僅支援 Copy 或 Direct");
+    }
+
+    auto& context = m_commandQueues[static_cast<size_t>(queue)];
+    if (context.activeUploadContext == UINT32_MAX) {
+        throw std::logic_error("QueueManager::CloseUploadRecording : 沒有進行中的錄製");
+    }
+
+    auto& item = context.uploadContexts[context.activeUploadContext];
+    if (item.isClosed) {
+        throw std::logic_error("QueueManager::CloseUploadRecording : Command list 已 Close");
+    }
+
+    Common::ThrowIfFailed(
+        item.commandList->Close(),
+        "QueueManager::CloseUploadRecording : Command list Close 失敗"
+    );
+
+    item.isClosed = true;
+}
+
+uint64_t QueueManager::ExecuteUploadRecording(QueueType queue) {
+    if (queue != QueueType::Copy && queue != QueueType::Direct) {
+        throw std::invalid_argument("QueueManager::ExecuteUploadRecording : 僅支援 Copy 或 Direct");
+    }
+
+    auto& context = m_commandQueues[static_cast<size_t>(queue)];
+    if (context.activeUploadContext == UINT32_MAX) {
+        throw std::logic_error("QueueManager::ExecuteUploadRecording : 沒有待提交的錄製");
+    }
+
+    auto& item = context.uploadContexts[context.activeUploadContext];
+    if (!item.isClosed) {
+        throw std::logic_error("QueueManager::ExecuteUploadRecording : Command list 尚未 Close");
+    }
+
+    ID3D12CommandList* lists[] = {
+        item.commandList.Get()
+    };
+
+    // 一旦送出，不能再把它當成未提交批次取消。
+    // Signal 失敗時，保留禁止重用的標記。
+    item.retireFenceValue = UINT64_MAX;
+    context.activeUploadContext = UINT32_MAX;
+
+    context.commandQueue->ExecuteCommandLists(1, lists);
+
+    const uint64_t fenceValue = Signal(queue);
+
+    item.retireFenceValue = fenceValue;
+
+    return fenceValue;
+}
+
+void QueueManager::CancelUploadRecording(QueueType queue){
+    const size_t index = static_cast<size_t>(queue);
+    if (index >= m_commandQueues.size()) {
+        return;
+    }
+
+    auto& context = m_commandQueues[index];
+    if (context.activeUploadContext == UINT32_MAX) {
+        return;
+    }
+
+    auto& item = context.uploadContexts[context.activeUploadContext];
+
+    // 尚未 Execute，可以丟棄這份 list。
+    // allocator 留到下一次使用時再 Reset。
+    item.commandList.Reset();
+    item.isClosed = false;
+    item.retireFenceValue = 0;
+
+    context.activeUploadContext = UINT32_MAX;
+}
+
+
+
 ID3D12CommandQueue* QueueManager::GetQueue(QueueType queue) const {
     return m_commandQueues.at(static_cast<size_t>(queue)).commandQueue.Get();
 }
 
 ID3D12GraphicsCommandList1* QueueManager::GetList(QueueType queue) const {
     return m_commandQueues.at(static_cast<size_t>(queue)).commandList.Get();
-}   
+} 
+
+uint64_t QueueManager::GetCompletedFenceValue(QueueType queue) const {
+    const size_t index = static_cast<size_t>(queue);
+    if (index >= m_commandQueues.size()) {
+        throw std::out_of_range("QueueManager::GetCompletedFenceValue : 無效 QueueType");
+    }
+
+    const auto& context = m_commandQueues[index];
+    if (!context.fence) {
+        throw std::logic_error("QueueManager::GetCompletedFenceValue : Fence 不存在");
+    }
+
+    const uint64_t completed = context.fence->GetCompletedValue();
+    if (completed == UINT64_MAX) {
+        throw std::runtime_error("QueueManager::GetCompletedFenceValue : 裝置已移除");
+    }
+
+    return completed;
+}

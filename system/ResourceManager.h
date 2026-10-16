@@ -4,8 +4,10 @@
 	
 #include <cstdint>				// uint16_t等
 #include <memory>				
+#include <cstddef>
 
 #include "system/HeapManager.h"
+#include "system/UploadManager.h"
 #include "system/DescriptorManager.h"
 #include "system/MeshManager.h"
 #include "system/TextureManager.h"
@@ -17,51 +19,74 @@
 
 using Microsoft::WRL::ComPtr;
 
+struct MappedBufferGpuResource {
+	ComPtr<ID3D12Resource> resource;
+	HeapAllocation allocation{};
+	unsigned char* cpuAddress = nullptr;
+};
+
 // 向前宣告 渲染單子 
 struct SceneRenderData;
 
-//目前全部CommitResource
+
+
 class ResourceManager {
-
-
-
-//改成placedbuffer後清理下面的public
 public:
 	static constexpr uint32_t FrameCount = Common::BackBufferCount;
 
-	//cb sb之後改place再說 現在先這樣
-	//constant buffer 
-	static const uint32_t				MaxCBVsPerFrame = 3;							//每個Frame最多幾個cbv
-	ComPtr<ID3D12Resource>				m_constantBuffer[FrameCount][MaxCBVsPerFrame];
-	void* m_cbvCpuAdress[FrameCount][MaxCBVsPerFrame] = { nullptr };
-
-	//sturcture buffer
-	const size_t						MAX_ELEMENTS = 50000;      // 物件上限
-	ComPtr<ID3D12Resource>				m_structureBuffer[FrameCount];
-	InstanceData* m_structureBufferCpuAddress[FrameCount] = { nullptr };
-
-public:
-	ResourceManager(ID3D12Device4* device) :m_device(device) {};
+	ResourceManager(ID3D12Device4* device, IDXGIAdapter4* adapter)
+		:m_device(device),m_adapter(adapter){};
 	~ResourceManager() = default;
 
 	void Init();
 	void Update(const SceneRenderData& data, uint32_t currentFrame);
 
+	void BeginUploadBatch();
+	void MarkUploadSubmissionStarted();					// 從這裡開始，這批資源不再允許 rollback。
+	void CommitUploadBatch(uint64_t copyFenceValue);
+	void RollbackUploadBatch() noexcept;
+
+	D3D12_GPU_VIRTUAL_ADDRESS GetConstantBufferAddress(uint32_t currentFrame, uint32_t slot = 0) const;
+	D3D12_GPU_VIRTUAL_ADDRESS GetStructuredBufferAddress(uint32_t currentFrame) const;
+
 	HeapManager*		GetHeapManager();
+	UploadManager*		GetUploadManager();
 	DescriptorManager*	GetDescriptorManager();
 	MeshManager*		GetMeshManager();
 	TextureManager*		GetTextureManager();
 
 private:
 	ComPtr<ID3D12Device4>			m_device;
+	ComPtr<IDXGIAdapter4>			m_adapter;
 
 	std::unique_ptr<HeapManager>		m_heapManager;
+	std::unique_ptr<UploadManager>		m_uploadManager;
 	std::unique_ptr<DescriptorManager>	m_descriptorManager;
 	std::unique_ptr<MeshManager>		m_meshManager;
 	std::unique_ptr<TextureManager>		m_textureManager;
 
-	void InitializeConstantBuffer();
-	void InitializeStructureBuffer();
+
+
+	bool m_uploadBatchActive = false;
+	bool m_uploadSubmissionStarted = false;
+
+	uint32_t m_descriptorUploadCheckpoint = 0;
+	MeshUploadCheckpoint m_meshUploadCheckpoint{};
+	TextureUploadCheckpoint m_textureUploadCheckpoint{};
+
+
+
+	static constexpr uint32_t MaxCBVsPerFrame = 3;
+	static constexpr uint64_t ConstantBufferSize = 4 * 1024;
+	static constexpr std::size_t MaxInstanceCount = 50000;
+
+	MappedBufferGpuResource m_constantBuffers[FrameCount][MaxCBVsPerFrame]{};
+	MappedBufferGpuResource m_structuredBuffers[FrameCount]{};
+
+	MappedBufferGpuResource CreateUploadBuffer(uint64_t size);
+
+	void InitConstantBuffers();
+	void InitStructuredBuffers();
 
 	void UpdatePerFrameCB(const SceneRenderData& data, uint32_t currentFrame);
 	void UpdateInstanceSB(const SceneRenderData& data, uint32_t currentFrame);

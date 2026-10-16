@@ -25,6 +25,7 @@ add_executable(ECS
         "system/QueueManager.cpp"  
         "system/ResourceManager.cpp"
             "system/HeapManager.cpp"
+            "system/UploadManager.cpp"
             "system/DescriptorManager.cpp"
             "system/MeshManager.cpp"
             "system/TextureManager.cpp" 

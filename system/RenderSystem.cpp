@@ -18,7 +18,7 @@ void RenderSystem::Init(HWND hwnd) {
     m_d3d12Engine->InitRootSig();
     ID3D12RootSignature* m_rootsig = m_d3d12Engine->GetRootsig();
 
-    m_resourceManager = std::make_unique<ResourceManager>(m_device);
+    m_resourceManager = std::make_unique<ResourceManager>(m_device, m_d3d12Engine->GetAdapter());
     m_resourceManager->Init();
 
     //預設只有一種rootsig
@@ -49,70 +49,177 @@ void RenderSystem::InitViewPortAndScissorRect() {
 
 // 資源載入
 MeshHandle RenderSystem::LoadOceanMesh(const OceanMeshData& meshData) {
-    auto currentFrame = m_d3d12Engine->GetFrameIndex();
+    if (!m_d3d12Engine || !m_queueManager || !m_resourceManager || m_uploadSubmissionFailed) {
+        throw std::logic_error("RenderSystem::LoadOceanMesh : RenderSystem 尚未初始化");
+    }
+
     auto* meshes = m_resourceManager->GetMeshManager();
-    auto* directList = m_queueManager->GetList(QueueType::Direct);
-    auto* copyList = m_queueManager->GetList(QueueType::Copy);
+    m_resourceManager->BeginUploadBatch();
 
-    m_queueManager->BeginCommandRecording(QueueType::Copy, currentFrame);
-    auto handle = meshes->LoadOceanMesh(meshData, copyList);
-    m_queueManager->EndAndExecuteCommandRecording(QueueType::Copy, currentFrame);
-    uint64_t waitForCopy = m_queueManager->Signal(QueueType::Copy);
-    //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-    m_queueManager->QueueWait(QueueType::Direct, QueueType::Copy, waitForCopy);
-    m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
-    meshes->TransitionMeshBuffers(handle, directList);
-    m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
+    MeshHandle handle{ UINT32_MAX };
+    try {
+        auto* copyList = m_queueManager->BeginUploadRecording(QueueType::Copy);
+        handle = meshes->LoadOceanMesh(meshData,copyList);
 
-    // 寫死的全部flush 之後改成動態檢測狀態 任務完成的才沖掉
-    m_queueManager->FlushCommandQueue(QueueType::Direct);
-
-    meshes->ClearUploadBuffers();
+        auto* directList = m_queueManager->BeginUploadRecording(QueueType::Direct);
+        meshes->TransitionMeshBuffers(handle, directList);
+    }
+    catch (...) {
+        CancelUploadBatch();
+        throw;
+    }
+    SubmitUploadBatch();
 
     return handle;
 }
 
-std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>& objects) {
-    auto currentFrame = m_d3d12Engine->GetFrameIndex();
-    auto* meshes = m_resourceManager->GetMeshManager();
-    auto* directList = m_queueManager->GetList(QueueType::Direct);
-    auto* copyList = m_queueManager->GetList(QueueType::Copy);
-    std::vector<MeshLoadResult> results;  
-    results.reserve(objects.size());
-
-    m_queueManager->BeginCommandRecording(QueueType::Copy, currentFrame);
-    for (auto object : objects) {
-        results.emplace_back(meshes->LoadMesh(object.c_str(), copyList));
+std::vector<MeshHandle> RenderSystem::LoadMeshes(const std::vector<std::string>& names) {
+    if (!m_d3d12Engine || !m_queueManager || !m_resourceManager || m_uploadSubmissionFailed) {
+        throw std::logic_error("RenderSystem::LoadMeshes : RenderSystem 尚未初始化");
     }
-    m_queueManager->EndAndExecuteCommandRecording(QueueType::Copy, currentFrame);
-    uint64_t waitForCopy = m_queueManager->Signal(QueueType::Copy);
-    //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-    m_queueManager->QueueWait(QueueType::Direct, QueueType::Copy, waitForCopy);
-    m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
-    for (const auto& result : results) {
-        if (result.newlyCreated)
-            meshes->TransitionMeshBuffers(result.handle, directList);
-    }
-    m_queueManager->EndAndExecuteCommandRecording(QueueType::Direct, currentFrame);
-
-    // 寫死的全部flush 之後改成動態檢測狀態 任務完成的才沖掉
-    m_queueManager->FlushCommandQueue(QueueType::Direct);
-
-    meshes->ClearUploadBuffers();
 
     std::vector<MeshHandle> handles;
-    handles.reserve(results.size());
-    for (const auto& result : results) {
-        handles.push_back(result.handle);
+    if (names.empty()) {
+        return handles;
     }
+    handles.reserve(names.size());
+
+    std::vector<MeshLoadResult> results;
+    results.reserve(names.size());
+
+    auto* meshes = m_resourceManager->GetMeshManager();
+    m_resourceManager->BeginUploadBatch();
+
+    try {
+        auto* copyList = m_queueManager->BeginUploadRecording(QueueType::Copy);
+        for (const auto& name : names) {
+            const MeshLoadResult result = meshes->LoadMesh(name.c_str(), copyList);
+
+            results.emplace_back(result);
+            handles.push_back(result.handle);
+        }
+
+        auto* directList = m_queueManager->BeginUploadRecording(QueueType::Direct);
+        for (const auto& result : results) {
+            if (!result.newlyCreated) {
+                continue;
+            }
+
+            meshes->TransitionMeshBuffers(result.handle, directList);
+        }
+    }
+    catch (...) {
+        CancelUploadBatch();
+        throw;
+    }
+
+    SubmitUploadBatch();
+
     return handles;
+}
+
+std::vector<TextureHandle> RenderSystem::LoadTextures(const std::vector<std::string>& names) {
+    if (!m_d3d12Engine || !m_queueManager || !m_resourceManager || m_uploadSubmissionFailed) {
+        throw std::logic_error("RenderSystem::LoadTextures : RenderSystem 尚未初始化");
+    }
+
+    std::vector<TextureHandle> handles;
+    if (names.empty()) {
+        return handles;
+    }
+    handles.reserve(names.size());
+
+    std::vector<TextureLoadResult> results;
+    results.reserve(names.size());
+
+    auto* textures = m_resourceManager->GetTextureManager();
+    m_resourceManager->BeginUploadBatch();
+
+    try {
+        auto* copyList = m_queueManager->BeginUploadRecording(QueueType::Copy);
+        for (const auto& name : names) {
+            const TextureLoadResult result = textures->LoadTexture(name.c_str(), copyList);
+
+            results.emplace_back(result);
+            handles.push_back(result.handle);
+        }
+
+        auto* directList = m_queueManager->BeginUploadRecording(QueueType::Direct);
+        for (const auto& result : results) {
+            if (!result.newlyCreated) {
+                continue;
+            }
+
+            textures->TransitionTexture(result.handle, directList, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        }
+    }
+    catch (...) {
+        CancelUploadBatch();
+        throw;
+    }
+
+    SubmitUploadBatch();
+
+    return handles;
+}
+
+
+
+void RenderSystem::CancelUploadBatch() noexcept {
+    // 先丟棄錄製指令，再撤回它們引用的新資源。
+    m_queueManager->CancelUploadRecording(QueueType::Direct);
+    m_queueManager->CancelUploadRecording(QueueType::Copy);
+
+    m_resourceManager->RollbackUploadBatch();
+}
+
+void RenderSystem::SubmitUploadBatch() {
+    // 先讓兩份 list 都 Close 成功。
+    // 此階段尚未送給 GPU，因此失敗可以取消。
+    try {
+        m_queueManager->CloseUploadRecording(QueueType::Copy);
+        m_queueManager->CloseUploadRecording(QueueType::Direct);
+    }
+    catch (...) {
+        CancelUploadBatch();
+        throw;
+    }
+
+    try {
+        m_resourceManager->MarkUploadSubmissionStarted();
+        const uint64_t waitForCopy = m_queueManager->ExecuteUploadRecording(QueueType::Copy);
+        m_resourceManager->CommitUploadBatch(waitForCopy);
+
+        m_queueManager->QueueWait(QueueType::Direct, QueueType::Copy, waitForCopy);
+        m_queueManager->ExecuteUploadRecording(QueueType::Direct);
+    }
+    catch (...) {
+        // 可能已有工作送給 GPU。
+        // 保留資源，不做 rollback；阻止繼續錄製畫面。
+        m_uploadSubmissionFailed = true;
+        throw;
+    }
 }
 
 
 
 // 現在每幀fence等待是在這裡 之後要修改 不然太醜
 void RenderSystem::Update(const SceneRenderData& data) {
-    auto currentFrame = m_d3d12Engine->GetFrameIndex();
+    if (m_uploadSubmissionFailed) {
+        throw std::logic_error("RenderSystem::Update : 上傳提交已失敗，不能繼續更新");
+    }
+#if defined(_DEBUG)
+    if (m_memoryBudgetQueryCounter == 0) {
+        m_localMemoryInfo = m_resourceManager->GetHeapManager()->GetVideoMemoryInfo();
+        m_memoryBudgetQueryCounter = 60;
+    }
+    --m_memoryBudgetQueryCounter;
+#endif
+
+    const uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
+    m_resourceManager->GetUploadManager()->Collect(
+        m_queueManager->GetCompletedFenceValue(QueueType::Copy)
+    );
 
     // 一幀的開始 啟用direct queue
     m_queueManager->WaitFrameReady(QueueType::Direct, currentFrame);
@@ -123,7 +230,11 @@ void RenderSystem::Update(const SceneRenderData& data) {
 }
 
 void RenderSystem::Render(const SceneRenderData& data) {
-    auto currentFrame = m_d3d12Engine->GetFrameIndex();
+    if (m_uploadSubmissionFailed) {
+        throw std::logic_error("RenderSystem::Render : 上傳提交已失敗，不能繼續錄製");
+    }
+
+    const uint32_t currentFrame = m_d3d12Engine->GetFrameIndex();
 
     m_queueManager->BeginCommandRecording(QueueType::Direct, currentFrame);
 
@@ -169,13 +280,13 @@ void RenderSystem::BindGlobalRenderResource(uint32_t currentFrame) {
         textureSrvHandle
     );
     //設定sb srv as root descriptor
-    D3D12_GPU_VIRTUAL_ADDRESS sbAddress = m_resourceManager->m_structureBuffer[currentFrame]->GetGPUVirtualAddress();
+    D3D12_GPU_VIRTUAL_ADDRESS sbAddress = m_resourceManager->GetStructuredBufferAddress(currentFrame);
     cmdList->SetGraphicsRootShaderResourceView(
         static_cast<UINT>(RootSlot::InstanceBuffer),
         sbAddress
     );
     //設定cbv as root descriptor
-    D3D12_GPU_VIRTUAL_ADDRESS cbvAddress = m_resourceManager->m_constantBuffer[currentFrame][0]->GetGPUVirtualAddress();
+    D3D12_GPU_VIRTUAL_ADDRESS cbvAddress = m_resourceManager->GetConstantBufferAddress(currentFrame);
     cmdList->SetGraphicsRootConstantBufferView(
         static_cast<UINT>(RootSlot::PerFrameConstant),
         cbvAddress
@@ -320,8 +431,7 @@ void RenderSystem::InitOceanHeight() {
     );
 }
 
-void RenderSystem::PrepareOceanHeight(const OceanWaveParameters& parameters)
-{
+void RenderSystem::PrepareOceanHeight(const OceanWaveParameters& parameters){
     auto* textures = m_resourceManager->GetTextureManager();
     auto* directList = m_queueManager->GetList(QueueType::Direct);
 

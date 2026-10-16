@@ -1,6 +1,8 @@
 #pragma once
 #include <DirectXMath.h>
 
+#include <cstdint>
+
 struct alignas(16) InstanceData {
 	DirectX::XMFLOAT4X4 Transform;				// 64 bytes
 	uint32_t			TextureIndex;			//  4 bytes

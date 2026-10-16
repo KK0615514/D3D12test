@@ -312,6 +312,12 @@ void D3D12Engine::UpdateSwapChainBackBufferIndex() {
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 }
 
+
+
+IDXGIAdapter4* D3D12Engine::GetAdapter() const {
+    return m_adapter.Get();
+}
+
 ID3D12Device4* D3D12Engine::GetDevice() const{
     return m_device.Get();
 }

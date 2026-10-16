@@ -37,17 +37,29 @@ public:
 	void Shutdown();
 
 	MeshHandle LoadOceanMesh(const OceanMeshData& meshData);
-	std::vector<MeshHandle> LoadMeshes(const std::vector<std::string>& objects);
+	std::vector<MeshHandle> LoadMeshes(const std::vector<std::string>& names);
+	std::vector<TextureHandle> LoadTextures(const std::vector<std::string>& names);
 
 private:
+#if defined(_DEBUG)
+	 DXGI_QUERY_VIDEO_MEMORY_INFO m_localMemoryInfo{};
+	 uint32_t m_memoryBudgetQueryCounter = 0;
+#endif
+
 	 std::unique_ptr<D3D12Engine>			m_d3d12Engine;
 	 std::unique_ptr<QueueManager>			m_queueManager;
 	 std::unique_ptr<ResourceManager>		m_resourceManager;
 	 std::unique_ptr<PipelineManager>		m_pipelineManager;
 
-	 //視窗與裁切規格	如果要小地圖等功能可多個
-	 D3D12_VIEWPORT						screenViewport{};
+	 D3D12_VIEWPORT						screenViewport{};		 //視窗與裁切規格	如果要小地圖等功能可多個
 	 D3D12_RECT							scissorRect{};
+
+	 bool m_uploadSubmissionFailed = false;
+
+	 void SubmitUploadBatch();
+	 void CancelUploadBatch() noexcept;
+
+
 
 	 void InitViewPortAndScissorRect();
 

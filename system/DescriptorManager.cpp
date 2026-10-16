@@ -52,6 +52,21 @@ DescriptorSlot DescriptorManager::Allocate() {
 
 
 
+uint32_t DescriptorManager::GetAllocationCount() const{
+    return m_cursor;
+}
+
+void DescriptorManager::RollbackAllocations(uint32_t count)  {
+    assert(
+        count <= m_cursor &&
+        "DescriptorManager::RollbackAllocations : 無效 checkpoint"
+    );
+
+    m_cursor = count;
+}
+
+
+
 ID3D12DescriptorHeap* DescriptorManager::GetShaderHeap() const {
     return m_shaderHeap.Get();
 }

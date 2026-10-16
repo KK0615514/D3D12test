@@ -18,6 +18,16 @@ enum class QueueType: size_t{
 	Count
 };
 
+struct UploadCommandContext {
+	ComPtr<ID3D12CommandAllocator> allocator;
+	ComPtr<ID3D12GraphicsCommandList1> commandList;
+
+	// GPU 完成到此值，才能重用 allocator。
+	uint64_t retireFenceValue = 0;	// 0：尚未提交；UINT64_MAX：禁止重用。
+
+	bool isClosed = false;
+};
+
 struct CommandQueueContext
 {
 	static constexpr uint32_t FrameCount = Common::BackBufferCount;
@@ -33,8 +43,13 @@ struct CommandQueueContext
 	uint64_t                            currentFenceValue = 1;				// for CPU
 	HANDLE                              fenceEvent = nullptr;
 
+	std::vector<UploadCommandContext> uploadContexts;
+	uint32_t activeUploadContext = UINT32_MAX;		// 同一條 queue 同時只準備一份上傳 command list。
+
 	~CommandQueueContext();
 };
+
+
 
 class QueueManager {
 public:
@@ -56,9 +71,16 @@ public:
 	uint64_t Signal(QueueType queue);
 	void QueueWait(QueueType waitingQueue,QueueType sourceQueue,uint64_t fenceValue);
 
+	// 不等待 GPU。
+	ID3D12GraphicsCommandList1* BeginUploadRecording(QueueType queue);	// 取得可重用的 context；沒有可用者時建立新的。
+	void CloseUploadRecording(QueueType queue);
+	uint64_t ExecuteUploadRecording(QueueType queue);					// 提交已 Close 的 list，並回傳此 queue 的完成 fence。
+	void CancelUploadRecording(QueueType queue);				// 只丟棄尚未 Execute 的 list。
+
 	// getter
 	ID3D12CommandQueue*			GetQueue(QueueType queue) const;
 	ID3D12GraphicsCommandList1*	GetList(QueueType queue) const;
+	uint64_t					GetCompletedFenceValue(QueueType queue) const;
 
 private:
 	static constexpr uint32_t FrameCount = Common::BackBufferCount;

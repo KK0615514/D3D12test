@@ -24,6 +24,7 @@ public:
 
 	void UpdateSwapChainBackBufferIndex();
 
+	IDXGIAdapter4*				GetAdapter() const;
 	ID3D12Device4*				GetDevice() const;
 	ID3D12RootSignature*		GetRootsig() const;
 	ID3D12Resource*				GetBackBuffer() const;

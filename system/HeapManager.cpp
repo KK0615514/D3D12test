@@ -9,8 +9,8 @@
 #include "system/CommonUtils.h"
 
 void HeapManager::Init(uint64_t defaultBlockSize, uint64_t uploadBlockSize) {
-    if (!m_device || defaultBlockSize == 0 || uploadBlockSize == 0){
-        throw std::invalid_argument("HeapManager::Init : 無效 Device 或 BlockSize");
+    if (!m_device || !m_adapter || defaultBlockSize == 0 || uploadBlockSize == 0){
+        throw std::invalid_argument("HeapManager::Init : 無效 Device、Adapter 或 BlockSize");
     }
     if (m_defaultBlockSize != 0) {
         throw std::logic_error("HeapManager::Init : 已經初始化");
@@ -56,8 +56,7 @@ uint64_t HeapManager::AlignUp(uint64_t value, uint64_t alignment){
 
 
 
-HeapAllocation HeapManager::Allocate(const D3D12_RESOURCE_DESC& desc,D3D12_HEAP_TYPE type)
-{
+HeapAllocation HeapManager::Allocate(const D3D12_RESOURCE_DESC& desc,D3D12_HEAP_TYPE type){
     if (m_defaultBlockSize == 0) {
         throw std::logic_error("HeapManager::Allocate : 尚未初始化");
     }
@@ -204,6 +203,26 @@ uint32_t HeapManager::CreateHeap(D3D12_HEAP_TYPE type, D3D12_HEAP_FLAGS flags, u
 }
 
 
+
+DXGI_QUERY_VIDEO_MEMORY_INFO HeapManager::GetVideoMemoryInfo(DXGI_MEMORY_SEGMENT_GROUP group) const {
+    if (!m_adapter) {throw std::logic_error("HeapManager::GetVideoMemoryInfo : Adapter 不存在");
+    }
+    if (group != DXGI_MEMORY_SEGMENT_GROUP_LOCAL && group != DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL) {
+        throw std::invalid_argument("HeapManager::GetVideoMemoryInfo : 無效記憶體區域");
+    }
+
+    DXGI_QUERY_VIDEO_MEMORY_INFO info{};
+    Common::ThrowIfFailed(
+        m_adapter->QueryVideoMemoryInfo(
+            0,      // 目前使用單 GPU node。
+            group,
+            &info
+        ),
+        "HeapManager::GetVideoMemoryInfo : 記憶體預算查詢失敗"
+    );
+
+    return info;
+}
 
 ID3D12Heap* HeapManager::GetHeap(uint32_t heapId) const {
     if (heapId >= m_heaps.size() ||

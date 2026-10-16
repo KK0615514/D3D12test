@@ -3,9 +3,66 @@
 #include <cstring>
 #include <stdexcept>
 #include <utility>
+#include <cassert>
 
 #include "system/CommonUtils.h"
 #include "system/GlbLoader.h"
+
+ComPtr<ID3D12Resource> MeshManager::CreateDefaultBuffer(const D3D12_RESOURCE_DESC& desc, HeapAllocation& allocation){
+    if (!m_device || !m_heapManager) {
+        throw std::logic_error("MeshManager::CreateDefaultBuffer : 缺少 Device 或 HeapManager");
+    }
+    if (desc.Dimension != D3D12_RESOURCE_DIMENSION_BUFFER || desc.Width == 0){
+        throw std::invalid_argument("MeshManager::CreateDefaultBuffer : 需要有效的 Buffer 描述");
+    }
+
+    const HeapAllocation allocated = m_heapManager->Allocate(
+        desc,
+        D3D12_HEAP_TYPE_DEFAULT
+    );
+
+    ComPtr<ID3D12Resource> resource;
+
+    Common::ThrowIfFailed(
+        m_device->CreatePlacedResource(
+            m_heapManager->GetHeap(allocated.heapId),
+            allocated.offset,
+            &desc,
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr,
+            IID_PPV_ARGS(&resource)
+        ),
+        "MeshManager::CreateDefaultBuffer : Placed buffer 建立失敗"
+    );
+
+    allocation = allocated;
+    return resource;
+}
+
+// cpu資料 memcpy進gpu
+UploadSlice MeshManager::StageUploadData(const void* sourceData,uint64_t size) {
+    if (!m_uploadManager) {
+        throw std::logic_error("MeshManager::StageUploadData : 缺少 UploadManager");
+    }
+    if (!sourceData || size == 0) {
+        throw std::invalid_argument("MeshManager::StageUploadData : 無效來源資料或 Size");
+    }
+
+    const UploadSlice slice = m_uploadManager->Allocate(
+        size,
+        4
+    );
+
+    std::memcpy(
+        slice.cpuAddress,
+        sourceData,
+        static_cast<size_t>(size)
+    );
+
+    return slice;
+}
+
+
 
 MeshHandle MeshManager::LoadOceanMesh(const OceanMeshData& meshData, ID3D12GraphicsCommandList1* copyList) {
     // 檢查資料合不合規
@@ -33,9 +90,6 @@ MeshHandle MeshManager::LoadOceanMesh(const OceanMeshData& meshData, ID3D12Graph
     gpuMesh.indexCount = static_cast<uint32_t>(meshData.indices.size());
 
     // 建立 default VB
-    D3D12_HEAP_PROPERTIES heapProps{};
-    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
     D3D12_RESOURCE_DESC vbDesc{};
     vbDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
     vbDesc.Width = vbSize;
@@ -46,109 +100,30 @@ MeshHandle MeshManager::LoadOceanMesh(const OceanMeshData& meshData, ID3D12Graph
     vbDesc.SampleDesc.Count = 1;
     vbDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-    Common::ThrowIfFailed(
-        m_device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &vbDesc,
-            D3D12_RESOURCE_STATE_COPY_DEST,
-            nullptr,
-            IID_PPV_ARGS(&gpuMesh.vertexBuffer)
-        ),
-        "MeshManager::LoadOceanMesh : Ocean default VB 建立失敗"
-    );
-
-    // 建立 default IB
     D3D12_RESOURCE_DESC ibDesc = vbDesc;
     ibDesc.Width = ibSize;
 
-    Common::ThrowIfFailed(
-        m_device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &ibDesc,
-            D3D12_RESOURCE_STATE_COPY_DEST,
-            nullptr,
-            IID_PPV_ARGS(&gpuMesh.indexBuffer)
-        ),
-        "MeshManager::LoadOceanMesh : Ocean default IB 建立失敗"
+    // 建立 default VB
+    gpuMesh.vertexBuffer = CreateDefaultBuffer(
+        vbDesc,
+        gpuMesh.vertexAllocation
+    );
+
+    // 建立 default IB
+    gpuMesh.indexBuffer = CreateDefaultBuffer(
+        ibDesc,
+        gpuMesh.indexAllocation
     );
 
     // 建立 upload VB
-    D3D12_HEAP_PROPERTIES uploadHeapProps{};
-    uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-    D3D12_RESOURCE_DESC uploadVbDesc = vbDesc;
-
-    Common::ThrowIfFailed(
-        m_device->CreateCommittedResource(
-            &uploadHeapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &uploadVbDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&gpuMesh.vertexUploadBuffer)
-        ),
-        "MeshManager::LoadOceanMesh : Ocean upload VB 建立失敗"
-    );
-
-    // 建立 upload IB
-    D3D12_RESOURCE_DESC uploadIbDesc = ibDesc;
-
-    Common::ThrowIfFailed(
-        m_device->CreateCommittedResource(
-            &uploadHeapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &uploadIbDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&gpuMesh.indexUploadBuffer)
-        ),
-        "MeshManager::LoadOceanMesh : Ocean upload IB 建立失敗"
-    );
-
-    // CPU 頂點資料寫入 upload VB
-    D3D12_RANGE readRange{ 0, 0 };
-    void* mappedVbData = nullptr;
-
-    Common::ThrowIfFailed(
-        gpuMesh.vertexUploadBuffer->Map(0, &readRange, &mappedVbData),
-        "MeshManager::LoadOceanMesh : Ocean VB Map 失敗"
-    );
-    std::memcpy(
-        mappedVbData,
+    auto vertexUploadBuffer = StageUploadData(
         meshData.vertices.data(),
-        static_cast<size_t>(vbSize)
-    );
-    gpuMesh.vertexUploadBuffer->Unmap(0, nullptr);
-
-    // CPU 索引資料寫入 upload IB
-    void* mappedIbData = nullptr;
-    Common::ThrowIfFailed(
-        gpuMesh.indexUploadBuffer->Map(0, &readRange, &mappedIbData),
-        "MeshManager::LoadOceanMesh : Ocean IB Map 失敗"
-    );
-    std::memcpy(
-        mappedIbData,
-        meshData.indices.data(),
-        static_cast<size_t>(ibSize)
-    );
-    gpuMesh.indexUploadBuffer->Unmap(0, nullptr);
-
-    // 記錄 upload → default 的複製指令
-    copyList->CopyBufferRegion(
-        gpuMesh.vertexBuffer.Get(),
-        0,
-        gpuMesh.vertexUploadBuffer.Get(),
-        0,
         vbSize
     );
 
-    copyList->CopyBufferRegion(
-        gpuMesh.indexBuffer.Get(),
-        0,
-        gpuMesh.indexUploadBuffer.Get(),
-        0,
+    // 建立 upload IB
+    auto indexUploadBuffer = StageUploadData(
+        meshData.indices.data(),
         ibSize
     );
 
@@ -163,11 +138,51 @@ MeshHandle MeshManager::LoadOceanMesh(const OceanMeshData& meshData, ID3D12Graph
     gpuMesh.indexBufferView.Format = DXGI_FORMAT_R32_UINT;
 
     // 保留資源並取得 Handle
-    MeshHandle handle{
+    const MeshHandle handle{
         static_cast<uint32_t>(m_meshes.size())
     };
 
-    m_meshes.push_back(std::move(gpuMesh));
+    const size_t meshCount = m_meshes.size();
+    const size_t pendingCount = m_pendingUploadBuffers.size();
+
+    // 此處尚未錄製這筆 mesh 的 copy。
+    // 保存失敗時，只移除這筆新增的紀錄。
+    try {
+        m_pendingUploadBuffers.push_back(std::move(vertexUploadBuffer));
+        m_pendingUploadBuffers.push_back(std::move(indexUploadBuffer));
+
+        m_meshes.push_back(std::move(gpuMesh));
+    }
+    catch (...) {
+        if (m_meshes.size() > meshCount) {
+            m_meshes.pop_back();
+        }
+        while (m_pendingUploadBuffers.size() > pendingCount) {
+            m_pendingUploadBuffers.pop_back();
+        }
+        throw;
+    }
+
+    // DEFAULT 與 UPLOAD 資源都已由 manager 持有。
+    const auto& storedMesh  = m_meshes[handle.id];
+    const auto& vertexSlice = m_pendingUploadBuffers[pendingCount];
+    const auto& indexSlice  = m_pendingUploadBuffers[pendingCount + 1];
+
+    copyList->CopyBufferRegion(
+        storedMesh.vertexBuffer.Get(),
+        0,
+        vertexSlice.resource,
+        vertexSlice.offset,
+        vbSize
+    );
+
+    copyList->CopyBufferRegion(
+        storedMesh.indexBuffer.Get(),
+        0,
+        indexSlice.resource,
+        indexSlice.offset,
+        ibSize
+    );
 
     return handle;
 }
@@ -225,107 +240,26 @@ MeshLoadResult MeshManager::LoadMesh(const char* name, ID3D12GraphicsCommandList
     vbDesc.SampleDesc.Count = 1;
     vbDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-    D3D12_HEAP_PROPERTIES heapProps{};
-    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-
-    Common::ThrowIfFailed(
-        m_device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &vbDesc,
-            D3D12_RESOURCE_STATE_COPY_DEST,
-            nullptr,
-            IID_PPV_ARGS(&gpuMesh.vertexBuffer)
-        ),
-        "MeshManager::LoadMesh : Mesh用default VB建立失敗"
-    );
-
     D3D12_RESOURCE_DESC ibDesc = vbDesc;
     ibDesc.Width = ibSize;
 
-    Common::ThrowIfFailed(
-        m_device->CreateCommittedResource(
-            &heapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &ibDesc,
-            D3D12_RESOURCE_STATE_COPY_DEST,
-            nullptr,
-            IID_PPV_ARGS(&gpuMesh.indexBuffer)
-        ),
-        "MeshManager::LoadMesh : Mesh用default IB建立失敗"
+    gpuMesh.vertexBuffer = CreateDefaultBuffer(
+        vbDesc,
+        gpuMesh.vertexAllocation
     );
 
-    //建立upload用buffer
-    D3D12_RESOURCE_DESC uploadVbDesc = vbDesc;
-
-    D3D12_HEAP_PROPERTIES uploadHeapProps{};
-    uploadHeapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-
-    Common::ThrowIfFailed(
-        m_device->CreateCommittedResource(
-            &uploadHeapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &uploadVbDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&gpuMesh.vertexUploadBuffer)
-        ),
-        "MeshManager::LoadMesh : Mesh用upload VB建立失敗"
+    gpuMesh.indexBuffer = CreateDefaultBuffer(
+        ibDesc,
+        gpuMesh.indexAllocation
     );
 
-    D3D12_RESOURCE_DESC uploadIbDesc = ibDesc;
-
-    Common::ThrowIfFailed(
-        m_device->CreateCommittedResource(
-            &uploadHeapProps,
-            D3D12_HEAP_FLAG_NONE,
-            &uploadIbDesc,
-            D3D12_RESOURCE_STATE_GENERIC_READ,
-            nullptr,
-            IID_PPV_ARGS(&gpuMesh.indexUploadBuffer)
-        ),
-        "MeshManager::LoadMesh : Mesh用upload IB建立失敗"
-    );
-
-    //上傳資料 進upload vb
-    void* mappedVbData = nullptr;
-    D3D12_RANGE readRange = { 0,0 };
-    Common::ThrowIfFailed(
-        gpuMesh.vertexUploadBuffer->Map(0, &readRange, &mappedVbData),
-        "MeshManager::LoadMesh : Mesh VB 資料上傳失敗"
-    );
-    memcpy(mappedVbData,
+    auto vertexUploadBuffer = StageUploadData(
         meshData.vertices.data(),
         vbSize
     );
-    gpuMesh.vertexUploadBuffer->Unmap(0, nullptr);
 
-    //上傳資料 進upload ib
-    void* mappedIbData = nullptr;
-    Common::ThrowIfFailed(
-        gpuMesh.indexUploadBuffer->Map(0, &readRange, &mappedIbData),
-        "MeshManager::LoadMesh : Mesh IB 資料上傳失敗"
-    );
-
-    memcpy(mappedIbData,
+    auto indexUploadBuffer = StageUploadData(
         meshData.indices.data(),
-        ibSize
-    );
-    gpuMesh.indexUploadBuffer->Unmap(0, nullptr);
-
-    //複製資料 進default vb ib
-    copyList->CopyBufferRegion(
-        gpuMesh.vertexBuffer.Get(),
-        0,
-        gpuMesh.vertexUploadBuffer.Get(),
-        0,
-        vbSize
-    );
-    copyList->CopyBufferRegion(
-        gpuMesh.indexBuffer.Get(),
-        0,
-        gpuMesh.indexUploadBuffer.Get(),
-        0,
         ibSize
     );
 
@@ -340,14 +274,62 @@ MeshLoadResult MeshManager::LoadMesh(const char* name, ID3D12GraphicsCommandList
     gpuMesh.indexBufferView.Format = DXGI_FORMAT_R32_UINT;
 
     // 目前只追加 不刪除或重排 所以使用size來設計的Handle 除此之外跟meshCache無依賴關係  
-    MeshHandle handle{
+    const MeshHandle handle{
         static_cast<uint32_t>(m_meshes.size())
     };
 
-    m_meshes.push_back(std::move(gpuMesh));
-    m_meshCache.emplace(key, handle);
+    const size_t meshCount = m_meshes.size();
+    const size_t pendingCount = m_pendingUploadBuffers.size();
 
-    return MeshLoadResult{ handle,true };
+    // 所有可能配置記憶體的保存／註冊操作，放在 copy 之前。
+    try {
+        m_pendingUploadBuffers.push_back(
+            std::move(vertexUploadBuffer)
+        );
+
+        m_pendingUploadBuffers.push_back(
+            std::move(indexUploadBuffer)
+        );
+
+        m_meshes.push_back(std::move(gpuMesh));
+
+        if (!m_meshCache.emplace(key, handle).second) {
+            throw std::logic_error("MeshManager::LoadMesh : 名稱已存在");
+        }
+    }
+    catch (...) {
+        if (m_meshes.size() > meshCount) {
+            m_meshes.pop_back();
+        }
+
+        while (m_pendingUploadBuffers.size() > pendingCount) {
+            m_pendingUploadBuffers.pop_back();
+        }
+
+        throw;
+    }
+
+    const auto& storedMesh  = m_meshes[handle.id];
+    const auto& vertexSlice = m_pendingUploadBuffers[pendingCount];
+    const auto& indexSlice  = m_pendingUploadBuffers[pendingCount + 1];
+
+    copyList->CopyBufferRegion(
+        storedMesh.vertexBuffer.Get(),
+        0,
+        vertexSlice.resource,
+        vertexSlice.offset,
+        vbSize
+    );
+
+    copyList->CopyBufferRegion(
+        storedMesh.indexBuffer.Get(),
+        0,
+        indexSlice.resource,
+        indexSlice.offset,
+        ibSize
+    );
+
+    return MeshLoadResult{ handle, true };
 }
 
 void MeshManager::TransitionMeshBuffers(MeshHandle handle, ID3D12GraphicsCommandList1* directList) {
@@ -385,9 +367,41 @@ void MeshManager::TransitionMeshBuffers(MeshHandle handle, ID3D12GraphicsCommand
 }
 
 void MeshManager::ClearUploadBuffers() {
-    for (auto& mesh : m_meshes) {
-        mesh.indexUploadBuffer.Reset();
-        mesh.vertexUploadBuffer.Reset();
+    m_pendingUploadBuffers.clear();
+}
+
+
+
+MeshUploadCheckpoint MeshManager::GetUploadCheckpoint() const{
+    return MeshUploadCheckpoint{
+        m_meshes.size(),
+        m_pendingUploadBuffers.size()
+    };
+}
+
+void MeshManager::RollbackUpload(const MeshUploadCheckpoint& checkpoint){
+    assert(
+        checkpoint.meshCount <= m_meshes.size() &&
+        checkpoint.pendingCount <= m_pendingUploadBuffers.size() &&
+        "MeshManager::RollbackUpload : 無效 checkpoint"
+    );
+
+    // 只刪除本批次新增的名稱。
+    for (auto it = m_meshCache.begin();it != m_meshCache.end(); ) {
+        if (it->second.id >= checkpoint.meshCount) {
+            it = m_meshCache.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+
+    while (m_meshes.size() > checkpoint.meshCount) {
+        m_meshes.pop_back();
+    }
+
+    while (m_pendingUploadBuffers.size() > checkpoint.pendingCount) {
+        m_pendingUploadBuffers.pop_back();
     }
 }
 

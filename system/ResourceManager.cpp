@@ -2,150 +2,257 @@
 
 #include <string>				// 使用 to_string
 #include <cstring>				// 使用 std::memcpy
+#include <stdexcept>
 
 #include "system/RenderData.h"
 
 void ResourceManager::Init() {
-    m_heapManager = std::make_unique<HeapManager>(m_device.Get());
+    if (!m_device || !m_adapter) {
+        throw std::invalid_argument("ResourceManager::Init : 無效 Device 或 Adapter");
+    }
+    if (m_heapManager || m_uploadManager || m_descriptorManager || m_meshManager || m_textureManager) {
+        throw std::logic_error("ResourceManager::Init : 已初始化或已有部分初始化的資源");
+    }
+
+    m_heapManager = std::make_unique<HeapManager>(m_device.Get(), m_adapter.Get());
     m_heapManager->Init();
+
+    m_uploadManager = std::make_unique<UploadManager>(m_device.Get(), m_heapManager.get());
+    m_uploadManager->Init();
 
     m_descriptorManager     = std::make_unique<DescriptorManager>(m_device.Get());
     m_descriptorManager->Init();
 
-    m_meshManager           = std::make_unique<MeshManager>(m_device.Get());
-    m_textureManager        = std::make_unique<TextureManager>(m_device.Get(), m_descriptorManager.get());
+    m_meshManager           = std::make_unique<MeshManager>(m_device.Get(), m_heapManager.get(), m_uploadManager.get());
+    m_textureManager        = std::make_unique<TextureManager>(m_device.Get(), m_heapManager.get(), m_uploadManager.get(), m_descriptorManager.get());
 
-    InitializeConstantBuffer();
-    InitializeStructureBuffer();
+    InitConstantBuffers();
+    InitStructuredBuffers();
 }
 
 void ResourceManager::Update(const SceneRenderData& data, uint32_t currentFrame) {
+    if (currentFrame >= FrameCount) {
+        throw std::out_of_range("ResourceManager::Update : Frame index 超出範圍");
+    }
+
     UpdatePerFrameCB(data, currentFrame);
     UpdateInstanceSB(data, currentFrame);
 }
 
 
 
-void ResourceManager::InitializeConstantBuffer() {
-    D3D12_HEAP_PROPERTIES heapProps = {};
-    heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
-    heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-    heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-    heapProps.CreationNodeMask = 1;
-    heapProps.VisibleNodeMask = 1;
+void ResourceManager::BeginUploadBatch() {
+    if (m_uploadBatchActive) {
+        throw std::logic_error("ResourceManager::BeginUploadBatch : 已有進行中的批次");
+    }
+    if (!m_meshManager ||
+        !m_textureManager ||
+        !m_uploadManager ||
+        !m_descriptorManager) {
+        throw std::logic_error("ResourceManager::BeginUploadBatch : Managers 尚未初始化");
+    }
 
-    uint32_t bufferSize = 4 * 1024; //每個cbv 上限64kb 效能為主4kb
-    D3D12_RESOURCE_DESC resourceDesc = {};
-    resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    resourceDesc.Alignment = 0;
-    resourceDesc.Width = bufferSize; // 必須對齊256
-    resourceDesc.Height = 1;
-    resourceDesc.DepthOrArraySize = 1;
-    resourceDesc.MipLevels = 1;
-    resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
-    resourceDesc.SampleDesc.Count = 1;
-    resourceDesc.SampleDesc.Quality = 0;
-    resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+    m_meshUploadCheckpoint = m_meshManager->GetUploadCheckpoint();
+    m_textureUploadCheckpoint = m_textureManager->GetUploadCheckpoint();
+    m_descriptorUploadCheckpoint = m_descriptorManager->GetAllocationCount();
 
-    for (uint32_t f = 0;f < FrameCount;++f)
-    {
-        for (uint32_t i = 0;i < MaxCBVsPerFrame;++i)
-        {
-            Common::ThrowIfFailed(
-                m_device->CreateCommittedResource(
-                    &heapProps,
-                    D3D12_HEAP_FLAG_NONE,
-                    &resourceDesc,
-                    D3D12_RESOURCE_STATE_GENERIC_READ,
-                    nullptr,
-                    IID_PPV_ARGS(&m_constantBuffer[f][i])
-                ),
-                "ResourceManager::InitializeConstantBuffer : CB建立失敗"
-            );
-            D3D12_RANGE readRange = { 0, 0 }; // CPU 不需要讀取這段記憶體 設為空
-            Common::ThrowIfFailed(
-                m_constantBuffer[f][i]->Map(0, &readRange, reinterpret_cast<void**>(&m_cbvCpuAdress[f][i])),
-                "ResourceManager::InitializeConstantBuffer : CB 用map建立失敗"
-            );
+    m_uploadManager->BeginBatch();
 
+    m_uploadSubmissionStarted = false;
+    m_uploadBatchActive = true;
+}
+
+void ResourceManager::MarkUploadSubmissionStarted() {
+    if (!m_uploadBatchActive || m_uploadSubmissionStarted) {
+        throw std::logic_error("ResourceManager::MarkUploadSubmissionStarted : 無效批次狀態");
+    }
+
+    m_uploadSubmissionStarted = true;
+}
+
+void ResourceManager::CommitUploadBatch(uint64_t copyFenceValue) {
+    if (!m_uploadBatchActive || !m_uploadSubmissionStarted) {
+        throw std::logic_error("ResourceManager::CommitUploadBatch : 無效批次狀態");
+    }
+
+    m_uploadManager->MarkSubmitted(copyFenceValue);
+
+    // 切片 resource 由 UploadManager 持有。
+    // 提交後可清除 manager 端的切片紀錄。
+    m_meshManager->ClearUploadBuffers();
+    m_textureManager->ClearUploadBuffers();
+
+    m_uploadBatchActive = false;
+    m_uploadSubmissionStarted = false;
+}
+
+void ResourceManager::RollbackUploadBatch() noexcept {
+    if (!m_uploadBatchActive || m_uploadSubmissionStarted) {
+        return;
+    }
+
+    m_textureManager->RollbackUpload(
+        m_textureUploadCheckpoint
+    );
+
+    m_meshManager->RollbackUpload(
+        m_meshUploadCheckpoint
+    );
+
+    m_descriptorManager->RollbackAllocations(
+        m_descriptorUploadCheckpoint
+    );
+
+    m_uploadManager->CancelBatch();
+
+    m_uploadBatchActive = false;
+}
+
+
+
+MappedBufferGpuResource ResourceManager::CreateUploadBuffer(uint64_t size) {
+    if (!m_device || !m_heapManager) {
+        throw std::logic_error("ResourceManager::CreateUploadBuffer : 尚未初始化");
+    }
+    if (size == 0) {
+        throw std::invalid_argument("ResourceManager::CreateUploadBuffer : Buffer 大小不可為零");
+    }
+
+    D3D12_RESOURCE_DESC desc{};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+    desc.Width = size;
+    desc.Height = 1;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.Format = DXGI_FORMAT_UNKNOWN;
+    desc.SampleDesc.Count = 1;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+    MappedBufferGpuResource data{};
+
+    data.allocation = m_heapManager->Allocate(
+        desc,
+        D3D12_HEAP_TYPE_UPLOAD
+    );
+
+    Common::ThrowIfFailed(
+        m_device->CreatePlacedResource(
+            m_heapManager->GetHeap(data.allocation.heapId),
+            data.allocation.offset,
+            &desc,
+            D3D12_RESOURCE_STATE_GENERIC_READ,
+            nullptr,
+            IID_PPV_ARGS(&data.resource)
+        ),
+        "ResourceManager::CreateUploadBuffer : Placed upload buffer 建立失敗"
+    );
+
+    const D3D12_RANGE readRange{ 0, 0 };
+    void* mappedData = nullptr;
+    Common::ThrowIfFailed(
+        data.resource->Map(0, &readRange, &mappedData),
+        "ResourceManager::CreateUploadBuffer : Buffer Map 失敗"
+    );
+    data.cpuAddress = static_cast<unsigned char*>(mappedData);
+
+    return data;
+}
+
+void ResourceManager::InitConstantBuffers() {
+    static_assert(
+        ConstantBufferSize %
+        D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT == 0,
+        "ResourceManager::InitConstantBuffers : CB 大小必須對齊 256 bytes"
+        );
+
+    static_assert(
+        sizeof(PerFrameConstant) <= ConstantBufferSize,
+        "ResourceManager::InitConstantBuffers : PerFrameConstant 超出 CB 容量"
+        );
+
+    for (uint32_t frame = 0; frame < FrameCount; ++frame) {
+        for (uint32_t slot = 0; slot < MaxCBVsPerFrame; ++slot) {
+            m_constantBuffers[frame][slot] =
+                CreateUploadBuffer(ConstantBufferSize);
         }
     }
 }
 
-void ResourceManager::InitializeStructureBuffer() {
-    D3D12_HEAP_PROPERTIES heapProps = {};
-    heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;                            //未來改成default 搭配一個upload buffer來每幀上傳物件資料
-    heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-    heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-    heapProps.CreationNodeMask = 1;
-    heapProps.VisibleNodeMask = 1;
+void ResourceManager::InitStructuredBuffers() {
+    constexpr uint64_t bufferSize = uint64_t{ sizeof(InstanceData) } * MaxInstanceCount;
 
-    D3D12_RESOURCE_DESC bufferDesc{};
-    bufferDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    bufferDesc.Alignment = 0;                                               // 0 表示預設對齊（64KB）
-    bufferDesc.Width = sizeof(InstanceData) * MAX_ELEMENTS;
-    bufferDesc.Height = 1;
-    bufferDesc.DepthOrArraySize = 1;
-    bufferDesc.MipLevels = 1;
-    bufferDesc.Format = DXGI_FORMAT_UNKNOWN; // Structured Buffer必為UNKNOWN
-    bufferDesc.SampleDesc.Count = 1;
-    bufferDesc.SampleDesc.Quality = 0;
-    bufferDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    bufferDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-    for (uint32_t i = 0; i < FrameCount; i++)
-    {
-        Common::ThrowIfFailed(
-            m_device->CreateCommittedResource(
-                &heapProps,
-                D3D12_HEAP_FLAG_NONE,
-                &bufferDesc,
-                D3D12_RESOURCE_STATE_GENERIC_READ,
-                nullptr,
-                IID_PPV_ARGS(&m_structureBuffer[i])
-            ),
-            "ResourceManager::InitializeStructureBuffer : SB 建立失敗"
-        );
-        D3D12_RANGE readRange = { 0, 0 }; // CPU 不需要讀取這段記憶體 設為空
-        Common::ThrowIfFailed(
-            m_structureBuffer[i]->Map(0, &readRange, reinterpret_cast<void**>(&m_structureBufferCpuAddress[i])),
-            "ResourceManager::InitializeStructureBuffer : SB 用指標map失敗"
-        );
-        
+    for (uint32_t frame = 0; frame < FrameCount; ++frame) {
+        m_structuredBuffers[frame] = CreateUploadBuffer(bufferSize);
     }
 }
 
 void ResourceManager::UpdatePerFrameCB(const SceneRenderData& data, uint32_t currentFrame) {
-    memcpy(m_cbvCpuAdress[currentFrame][0], 
+    auto& buffer = m_constantBuffers[currentFrame][0];
+    if (!buffer.resource || !buffer.cpuAddress) {
+        throw std::logic_error("ResourceManager::UpdatePerFrameCB : Constant buffer 尚未初始化");
+    }
+
+    std::memcpy(
+        buffer.cpuAddress,
         &data.cameraData,
         sizeof(data.cameraData)
     );
 }
 
-void ResourceManager::UpdateInstanceSB(const SceneRenderData& data, uint32_t currentFrame){
-    // 檢查當前幀的Instance count是否超過 SB最大容量
-    if (data.instanceDatas.size() > MAX_ELEMENTS) {
-        throw std::runtime_error(
-            "ResourceManager::UpdateInstanceSB : Instance count 超過最大容量: " +
-            std::to_string(MAX_ELEMENTS)
-        );
+void ResourceManager::UpdateInstanceSB(const SceneRenderData& data, uint32_t currentFrame) {
+    if (data.instanceDatas.size() > MaxInstanceCount) {
+        throw std::overflow_error("ResourceManager::UpdateInstanceSB : Instance count 超過最大容量");
     }
-
-    // 檢查SB是否為空
     if (data.instanceDatas.empty()) {
         return;
     }
-    
-    memcpy(m_structureBufferCpuAddress[currentFrame],
+
+    auto& buffer = m_structuredBuffers[currentFrame];
+    if (!buffer.resource || !buffer.cpuAddress) {
+        throw std::logic_error("ResourceManager::UpdateInstanceSB : Structured buffer 尚未初始化");
+    }
+
+    std::memcpy(
+        buffer.cpuAddress,
         data.instanceDatas.data(),
         data.instanceDatas.size() * sizeof(InstanceData)
     );
 }
 
 
+
+D3D12_GPU_VIRTUAL_ADDRESS ResourceManager::GetConstantBufferAddress(uint32_t currentFrame, uint32_t slot) const {
+    if (currentFrame >= FrameCount || slot >= MaxCBVsPerFrame) {
+        throw std::out_of_range("ResourceManager::GetConstantBufferAddress : Frame 或 slot 超出範圍");
+    }
+
+    const auto& buffer = m_constantBuffers[currentFrame][slot];
+    if (!buffer.resource) {
+        throw std::logic_error("ResourceManager::GetConstantBufferAddress : Constant buffer 尚未初始化");
+    }
+
+    return buffer.resource->GetGPUVirtualAddress();
+}
+
+D3D12_GPU_VIRTUAL_ADDRESS ResourceManager::GetStructuredBufferAddress(uint32_t currentFrame) const {
+    if (currentFrame >= FrameCount) {
+        throw std::out_of_range("ResourceManager::GetStructuredBufferAddress : Frame index 超出範圍");
+    }
+
+    const auto& buffer = m_structuredBuffers[currentFrame];
+    if (!buffer.resource) {
+        throw std::logic_error("ResourceManager::GetStructuredBufferAddress : Structured buffer 尚未初始化");
+    }
+
+    return buffer.resource->GetGPUVirtualAddress();
+}
+
 HeapManager* ResourceManager::GetHeapManager() {
     return m_heapManager.get();
+}
+
+UploadManager* ResourceManager::GetUploadManager() {
+    return m_uploadManager.get();
 }
 
 DescriptorManager* ResourceManager::GetDescriptorManager() {
